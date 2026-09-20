@@ -56,6 +56,10 @@ class SellingResource extends Resource
                 TextColumn::make('customer_number')
                     ->translateLabel()
                     ->default('-'),
+                TextColumn::make('customer_name')
+                    ->translateLabel()
+                    ->searchable()
+                    ->default('-'),
                 TextColumn::make('date')
                     ->dateTime(timezone: Profile::get()->timezone)
                     ->translateLabel(),
@@ -78,7 +82,7 @@ class SellingResource extends Resource
                     ->visible(feature(ProductInitialPrice::class))
                     ->money(Setting::get('currency', 'IDR')),
             ])
-            ->searchPlaceholder('Search (Code, User, Customer Number')
+            ->searchPlaceholder('Search (Code, User, Customer Name, Customer Number)')
             ->header(view('filament.tenant.resources.sellings.headers.overview', [
                 'start_date' => request()->input('tableFilters.date.start_date'),
                 'end_date' => request()->input('tableFilters.date.end_date'),

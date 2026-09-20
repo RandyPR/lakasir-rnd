@@ -15,6 +15,8 @@ class SellingCollection extends JsonResource
         return [
             'id' => $this->id,
             'member_id' => $this->member_id,
+            'customer_name' => $this->customer_name,
+            'customer_number' => $this->customer_number,
             'user_id' => $this->user_id,
             'code' => $this->code,
             'payment_method_id' => $this->payment_method_id,

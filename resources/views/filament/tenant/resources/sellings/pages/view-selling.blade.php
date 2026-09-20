@@ -15,6 +15,9 @@
                 <li class="flex justify-between text-secondary text-sm mb-1"><span class="font-semibold">@lang('Table')</span><span>{{ $record->table?->number ?? 'N/A' }}</span></li>
               @endif
               <li class="flex justify-between text-secondary text-sm mb-1"><span class="font-semibold">@lang('Cashier')</span><span>{{ $record->user->name }}</span></li>
+              @if($record->customer_name)
+                <li class="flex justify-between text-secondary text-sm mb-1"><span class="font-semibold">@lang('Customer')</span><span>{{ $record->customer_name }}</span></li>
+              @endif
               <li class="flex justify-between text-secondary text-sm mb-1"><span class="font-semibold">@lang('Date')</span><span>{{ now()->parse($record->date)->setTimezone(Profile::get()->timezone ?? 'UTC')->format('d F Y H:i') }}</span></li>
               <li class="flex justify-between text-secondary text-sm mb-1"><span class="font-semibold">@lang('Payment method')</span><span>{{ $record->paymentMethod->name }}</span></li>
               <li class="flex justify-between text-secondary text-sm mb-1"><span class="font-semibold">@lang('Voucher')</span><span>{{ $record->voucher ?? 'N/A' }}</span></li>
@@ -137,8 +140,13 @@
           ])
           .send()
       } else {
-        const printer = new Printer(printerData.printerId);
-        let printerAction = printer.font('a');
+        const printer = new Printer(printerData);
+        let printerAction = printer;
+        const logo = printerData.logo || @js(Setting::get('receipt_logo'));
+        if (logo) {
+          await printerAction.image(logo, printerData.paper_width || @js(Setting::get('receipt_paper_width', '58')));
+        }
+        printerAction.font('a');
         if(about != undefined || about != null) {
           printerAction.size(1)
             .align('center')
@@ -160,6 +168,10 @@
         if(selling.member != undefined && selling.member != null) {
           printerAction
             .table(['Member', selling.member.name]);
+        }
+        if(selling.customer_name) {
+          printerAction
+            .table(['@lang('Customer')', selling.customer_name]);
         }
         printerAction
           .text('-------------------------------');

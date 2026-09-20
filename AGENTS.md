@@ -6,9 +6,17 @@ This is a multi-tenant Point of Sale (POS) application built with Laravel 11.x, 
 
 ## Build/Lint/Test Commands
 
+### Environment: Laravel Herd (Windows)
+Always use `herd` command prefix:
+```bash
+herd php ...
+herd composer ...
+herd artisan ...
+```
+
 ### Dependencies
 ```bash
-composer install          # Install PHP dependencies
+herd composer install    # Install PHP dependencies
 npm install              # Install frontend dependencies
 ```
 
@@ -20,19 +28,19 @@ npm run build            # Production build
 
 ### Test Commands
 ```bash
-php artisan test                                    # Run all tests
-php artisan test --filter=TestName                  # Run specific test by name
-php artisan test tests/Feature/Path/To/Test.php     # Run single test file
-vendor/bin/pest                                     # Run Pest directly
-vendor/bin/pest --filter="test name here"           # Run specific test
+herd php artisan test                                    # Run all tests
+herd php artisan test --filter=TestName                  # Run specific test by name
+herd php artisan test tests/Feature/Path/To/Test.php     # Run single test file
+herd php vendor/bin/pest                                 # Run Pest directly
+herd php vendor/bin/pest --filter="test name here"       # Run specific test
 ```
 
 ### Database Setup
 ```bash
-php artisan key:generate
-php artisan migrate --path=database/migrations/tenant --seed
-php artisan filament:assets
-php artisan livewire:publish --assets
+herd php artisan key:generate
+herd php artisan migrate --path=database/migrations/tenant --seed
+herd php artisan filament:assets
+herd php artisan livewire:publish --assets
 ```
 
 ### Code Formatting

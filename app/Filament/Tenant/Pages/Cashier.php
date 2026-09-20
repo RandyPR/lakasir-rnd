@@ -154,6 +154,14 @@ class Cashier extends Page implements HasForms, HasTable
                         'class' => 'hidden',
                     ])
                     ->searchable(),
+                TextInput::make('customer_name')
+                    ->label(__('Customer Name'))
+                    ->hiddenLabel()
+                    ->placeholder(__('Enter customer name'))
+                    ->extraAttributes([
+                        'id' => 'customerNameInput',
+                        'class' => 'hidden',
+                    ]),
                 RichEditor::make('note')
                     ->hiddenLabel()
                     ->extraAttributes([

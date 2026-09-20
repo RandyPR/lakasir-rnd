@@ -6,12 +6,17 @@ let selectedDevice = null;
  * @returns {Object|Error} The printer settings object or an Error if not set.
  */
 function getPrinter() {
-  if (localStorage.printer == undefined) {
-    console.error('printer didn\'t set');
-    return Error('printer didn\'t set');
+  if (!localStorage.printer) {
+    console.warn('printer not set');
+    return null;
   }
 
-  return JSON.parse(localStorage.printer);
+  try {
+    return JSON.parse(localStorage.printer);
+  } catch (e) {
+    console.error('Error parsing localStorage.printer:', e);
+    return null;
+  }
 }
 
 /**

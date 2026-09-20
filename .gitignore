@@ -32,3 +32,10 @@ tasks/
 .mcp.json
 opencode.json
 version.txt
+
+# Local database files
+database/lakasir_*
+
+# Generated tool and vendor assets
+graphify-out/
+/public/vendor/

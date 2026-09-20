@@ -452,6 +452,8 @@
   <script>
     window.lakasirCurrency = @js($currency);
     window.lakasirLocale = @js($locale);
+    window.lakasirReceiptLogo = @js(\App\Models\Tenants\Setting::get('receipt_logo'));
+    window.lakasirReceiptPaperWidth = @js(\App\Models\Tenants\Setting::get('receipt_paper_width', '58'));
     let selling = null;
     $wire.on('selling-created', (event) => {
       selling = event.selling;
@@ -484,8 +486,13 @@
             ])
             .send()
         } else {
-          const printer = new Printer(printerData.printerId);
-          let printerAction = printer.font('a');
+          const printer = new Printer(printerData);
+          let printerAction = printer;
+          const logo = printerData.logo || window.lakasirReceiptLogo;
+          if (logo) {
+            await printerAction.image(logo, printerData.paper_width || window.lakasirReceiptPaperWidth || 58);
+          }
+          printerAction.font('a');
           if (about != undefined || about != null) {
             printerAction.size(1)
               .align('center')
@@ -507,6 +514,10 @@
           if (selling.member != undefined && selling.member != null) {
             printerAction
               .table(['Member', selling.member.name]);
+          }
+          if (selling.customer_name) {
+            printerAction
+              .table(['@lang('Customer')', selling.customer_name]);
           }
           printerAction
             .text('-------------------------------');
@@ -699,16 +710,24 @@
         let inputId = event.inputId;
         let title = event.title;
         let titleModal = document.getElementById("titleEditDetail");
-        titleModal.innerHTML = title;
+        if (titleModal) {
+          titleModal.innerHTML = title;
+        }
         index = event.index;
         input = document.getElementById(inputId);
-        const result = [...(input.parentNode.parentNode.parentNode.parentNode.parentNode.children)].forEach((child,
-          i) => {
-          if (i != index) {
-            child.classList.add('hidden');
+        if (input) {
+          let container = input.closest('form')?.querySelector('.grid') || input.parentNode?.parentNode?.parentNode?.parentNode?.parentNode;
+          if (container && container.children) {
+            [...container.children].forEach((child, i) => {
+              if (!child.contains(input) && (index === undefined || i !== index)) {
+                child.classList.add('hidden');
+              } else {
+                child.classList.remove('hidden');
+              }
+            });
           }
-        });
-        input.classList.remove('hidden');
+          input.classList.remove('hidden');
+        }
       }
       let totalPrice = $refs.total.getAttribute('data-value');
       if ("@js(feature(PaymentShortcutButton::class))" == 'true') {
@@ -720,15 +739,17 @@
     $wire.on('close-modal', (event) => {
       if (input != undefined) {
         let titleModal = document.getElementById("titleEditDetail");
-        titleModal.innerHTML = '@lang('Edit detail')';
-        const result = [...(input.parentNode.parentNode.parentNode.parentNode.parentNode.children)].forEach((child,
-          i) => {
-          if (i != index) {
+        if (titleModal) {
+          titleModal.innerHTML = '@lang('Edit detail')';
+        }
+        let container = input.closest('form')?.querySelector('.grid') || input.parentNode?.parentNode?.parentNode?.parentNode?.parentNode;
+        if (container && container.children) {
+          [...container.children].forEach((child) => {
             child.classList.remove('hidden');
-          }
-        });
+          });
+        }
         input.classList.add('hidden');
-        input = undefined
+        input = undefined;
       }
       modalOpened = false;
     });

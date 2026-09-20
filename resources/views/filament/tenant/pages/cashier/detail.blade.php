@@ -17,6 +17,15 @@
   @endfeature
   <div class="flex justify-between hover:underline cursor-pointer"
       x-on:mousedown="$dispatch('open-modal', {
+        id: 'edit-detail',
+        inputId: 'customerNameInput',
+        title: '@lang('Customer name')'
+      })">
+    <p>{{ __('Customer') }}</p>
+    <p class="font-bold">{{ !empty($cartDetail['customer_name']) ? $cartDetail['customer_name'] : '-' }}</p>
+  </div>
+  <div class="flex justify-between hover:underline cursor-pointer"
+      x-on:mousedown="$dispatch('open-modal', {
        id: 'edit-detail',
        inputId: 'noteInput',
        index: 1,

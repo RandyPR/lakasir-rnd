@@ -50,6 +50,7 @@ class TransactionSellingStoreRequest extends FormRequest
 
         return [
             'fee' => ['numeric'],
+            'customer_name' => ['nullable', 'string', 'max:255'],
             'payed_money' => [
                 'required',
                 ! $pMethod->is_credit ? 'gte:'.$totalPrice : null,
