@@ -20,7 +20,26 @@ class Selling extends Model
 
     protected $appends = [
         'grand_total_price',
+        'formatted_daily_order_number',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Selling $selling) {
+            if (empty($selling->daily_order_number)) {
+                $targetDate = $selling->date 
+                    ? \Illuminate\Support\Carbon::parse($selling->date)->toDateString() 
+                    : ($selling->created_at ? $selling->created_at->toDateString() : now()->toDateString());
+
+                $max = static::whereDate('date', $targetDate)->max('daily_order_number');
+                if (! $max) {
+                    $max = static::whereDate('created_at', $targetDate)->max('daily_order_number');
+                }
+
+                $selling->daily_order_number = ($max ?? 0) + 1;
+            }
+        });
+    }
 
     public function sellingDetails()
     {
@@ -60,6 +79,13 @@ class Selling extends Model
     public function grandTotalPrice(): Attribute
     {
         return Attribute::make(get: fn () => $this->total_price - $this->tax_price - $this->total_discount_per_item - $this->discount_price);
+    }
+
+    public function formattedDailyOrderNumber(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->daily_order_number ? 'Order #' . str_pad((string) $this->daily_order_number, 3, '0', STR_PAD_LEFT) : null
+        );
     }
 
     public function table(): BelongsTo

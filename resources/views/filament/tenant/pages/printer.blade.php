@@ -275,6 +275,14 @@
               .text($wire.data.header);
           }
 
+          printerAction
+            .align('center')
+            .size(1, 1)
+            .style('bold')
+            .text('Order #001')
+            .style('normal')
+            .size(0, 0);
+
           printerAction.align('left')
             .text('-------------------------------')
             .table(['Cashier', 'Nama kasir'])

@@ -11,6 +11,9 @@
           <div class="details">
             <ul class="my-1">
               <li class="flex justify-between text-secondary text-sm mb-1"><span class="font-semibold">@lang('Code')</span><span>#{{ $record->code }}</span></li>
+              @if($record->daily_order_number)
+                <li class="flex justify-between text-secondary text-sm mb-1"><span class="font-semibold">@lang('Daily Order')</span><span class="font-bold text-primary-600 dark:text-primary-400">{{ $record->formatted_daily_order_number }}</span></li>
+              @endif
               @if(About::first() && About::first()->business_type == 'fnb')
                 <li class="flex justify-between text-secondary text-sm mb-1"><span class="font-semibold">@lang('Table')</span><span>{{ $record->table?->number ?? 'N/A' }}</span></li>
               @endif
@@ -157,22 +160,36 @@
             printerAction
               .text(printerData.header);
           }
-          printerAction.align('left')
-            .text('-------------------------------');
         }
-        printerAction.table(['@lang('Cashier')', selling.user.name])
+
+        if (selling.daily_order_number || selling.formatted_daily_order_number) {
+          const orderLabel = selling.formatted_daily_order_number || ('Order #' + String(selling.daily_order_number).padStart(3, '0'));
+          printerAction
+            .align('center')
+            .size(1, 1)
+            .style('bold')
+            .text(orderLabel)
+            .style('normal')
+            .size(0, 0);
+        }
+
+        printerAction.align('left')
+          .text('-------------------------------');
+
+        printerAction.table(['@lang('Cashier')', selling.user.name]);
         if(selling.table != undefined && selling.table != null) {
-          printerAction.table(['@lang('Table')', selling.table.number])
+          printerAction.table(['@lang('Table')', selling.table.number]);
         }
         printerAction.table(['@lang('Payment method')', selling.payment_method.name]);
-        if(selling.member != undefined && selling.member != null) {
-          printerAction
-            .table(['Member', selling.member.name]);
+
+        let customerDisplay = '@lang('General')';
+        if (selling.customer_name) {
+          customerDisplay = selling.customer_name;
+        } else if (selling.member && selling.member.name) {
+          customerDisplay = selling.member.name;
         }
-        if(selling.customer_name) {
-          printerAction
-            .table(['@lang('Customer')', selling.customer_name]);
-        }
+        printerAction.table(['@lang('Customer')', customerDisplay]);
+
         printerAction
           .text('-------------------------------');
         selling.selling_details.forEach(sellingDetail => {

@@ -14,6 +14,8 @@ class SellingCollection extends JsonResource
     {
         return [
             'id' => $this->id,
+            'daily_order_number' => $this->daily_order_number,
+            'formatted_daily_order_number' => $this->formatted_daily_order_number,
             'member_id' => $this->member_id,
             'customer_name' => $this->customer_name,
             'customer_number' => $this->customer_number,

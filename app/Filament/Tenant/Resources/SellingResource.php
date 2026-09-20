@@ -41,6 +41,10 @@ class SellingResource extends Resource
                 TextColumn::make('code')
                     ->searchable()
                     ->sortable(),
+                TextColumn::make('daily_order_number')
+                    ->label(__('Order #'))
+                    ->formatStateUsing(fn ($state) => $state ? 'Order #' . str_pad((string) $state, 3, '0', STR_PAD_LEFT) : '-')
+                    ->sortable(),
                 TextColumn::make('user.name')
                     ->label(__('Cashier'))
                     ->searchable(query: function (Builder $query, string $search): Builder {

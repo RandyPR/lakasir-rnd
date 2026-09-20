@@ -39,12 +39,32 @@ test('cashier can create selling transaction with customer_name', function () {
 
     $response->assertOk()
         ->assertJsonPath('message', 'success create selling')
-        ->assertJsonPath('data.customer_name', 'Budi Santoso');
+        ->assertJsonPath('data.customer_name', 'Budi Santoso')
+        ->assertJsonPath('data.daily_order_number', 1)
+        ->assertJsonPath('data.formatted_daily_order_number', 'Order #001');
 
     $this->assertDatabaseHas('sellings', [
         'customer_name' => 'Budi Santoso',
+        'daily_order_number' => 1,
         'total_price' => 25000,
     ]);
+
+    // Second transaction should auto-increment to 2
+    $response2 = actingAs($user)->postJson('/api/transaction/selling', [
+        'customer_name' => 'Siti Rahma',
+        'payed_money' => 30000,
+        'friend_price' => false,
+        'products' => [
+            [
+                'product_id' => $this->product->id,
+                'qty' => 1,
+            ],
+        ],
+    ]);
+
+    $response2->assertOk()
+        ->assertJsonPath('data.daily_order_number', 2)
+        ->assertJsonPath('data.formatted_daily_order_number', 'Order #002');
 });
 
 test('cashier can create selling transaction without customer_name as optional', function () {

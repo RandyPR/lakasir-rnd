@@ -503,22 +503,36 @@
               printerAction
                 .text(printerData.header);
             }
-            printerAction.align('left')
-              .text('-------------------------------');
           }
-          printerAction.table(['@lang('Cashier')', selling.user.name])
+
+          if (selling.daily_order_number || selling.formatted_daily_order_number) {
+            const orderLabel = selling.formatted_daily_order_number || ('Order #' + String(selling.daily_order_number).padStart(3, '0'));
+            printerAction
+              .align('center')
+              .size(1, 1)
+              .style('bold')
+              .text(orderLabel)
+              .style('normal')
+              .size(0, 0);
+          }
+
+          printerAction.align('left')
+            .text('-------------------------------');
+
+          printerAction.table(['@lang('Cashier')', selling.user.name]);
           if (selling.table != undefined && selling.table != null) {
-            printerAction.table(['@lang('Table')', selling.table.number])
+            printerAction.table(['@lang('Table')', selling.table.number]);
           }
           printerAction.table(['@lang('Payment method')', selling.payment_method.name]);
-          if (selling.member != undefined && selling.member != null) {
-            printerAction
-              .table(['Member', selling.member.name]);
-          }
+
+          let customerDisplay = '@lang('General')';
           if (selling.customer_name) {
-            printerAction
-              .table(['@lang('Customer')', selling.customer_name]);
+            customerDisplay = selling.customer_name;
+          } else if (selling.member && selling.member.name) {
+            customerDisplay = selling.member.name;
           }
+          printerAction.table(['@lang('Customer')', customerDisplay]);
+
           printerAction
             .text('-------------------------------');
           selling.selling_details.forEach(sellingDetail => {
