@@ -201,7 +201,7 @@ class Cashier extends Page implements HasForms, HasTable
     {
         try {
             $state = $this->storeCartForm->getState();
-            $this->cartDetail = array_merge($this->cartDetail, array_filter($state, fn ($v) => ! is_null($v)));
+            $this->cartDetail = array_merge($this->cartDetail, array_filter($state, fn ($v) => ! is_null($v) && $v !== ''));
         } catch (\Throwable $e) {
         }
 
@@ -249,8 +249,14 @@ class Cashier extends Page implements HasForms, HasTable
     {
         try {
             $state = $this->storeCartForm->getState();
-            $this->cartDetail = array_merge($this->cartDetail, array_filter($state, fn ($v) => ! is_null($v)));
+            $this->cartDetail = array_merge($this->cartDetail, array_filter($state, fn ($v) => ! is_null($v) && $v !== ''));
         } catch (\Throwable $e) {
+        }
+
+        if (! empty($this->cartDetail['customer_name'])) {
+            $this->cartDetail['customer_name'] = trim((string) $this->cartDetail['customer_name']);
+        } else {
+            $this->cartDetail['customer_name'] = null;
         }
 
         $this->cartDetail = array_merge($this->cartDetail, [

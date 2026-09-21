@@ -722,10 +722,12 @@
       }
     }
 
-    $wire.on('open-modal', (event) => {
+    function handleOpenModal(event) {
+      let data = event.detail || event;
+      if (!data) return;
 
       // Initialize QR scanner when modal opens
-      if (event.id === 'qr-scanner-modal') {
+      if (data.id === 'qr-scanner-modal') {
         // Create scanner instance only once (singleton pattern)
         if (!html5QrcodeScanner) {
           html5QrcodeScanner = new Html5QrcodeScanner(
@@ -741,44 +743,57 @@
         html5QrcodeScanner.render(onScanSuccess, onScanFailure);
       }
 
-
-      if (event.inputId != undefined) {
-        let inputId = event.inputId;
-        let title = event.title;
+      if (data.inputId != undefined) {
+        let inputId = data.inputId;
+        let title = data.title;
         let titleModal = document.getElementById("titleEditDetail");
-        if (titleModal) {
+        if (titleModal && title) {
           titleModal.innerHTML = title;
         }
-        index = event.index;
-        input = document.getElementById(inputId);
-        if (input) {
-          let container = input.closest('form')?.querySelector('.grid') || input.parentNode?.parentNode?.parentNode?.parentNode?.parentNode;
-          if (container && container.children) {
-            [...container.children].forEach((child, i) => {
-              if (!child.contains(input) && (index === undefined || i !== index)) {
-                child.classList.add('hidden');
-              } else {
-                child.classList.remove('hidden');
+        index = data.index;
+
+        const setupInput = () => {
+          input = document.getElementById(inputId);
+          if (input) {
+            let container = input.closest('form')?.querySelector('.grid') || input.closest('.grid') || input.parentNode?.parentNode?.parentNode?.parentNode?.parentNode;
+            if (container && container.children) {
+              [...container.children].forEach((child, i) => {
+                if (!child.contains(input) && (index === undefined || i !== index)) {
+                  child.classList.add('hidden');
+                } else {
+                  child.classList.remove('hidden');
+                }
+              });
+            }
+            input.classList.remove('hidden');
+            setTimeout(() => {
+              const focusEl = input.querySelector('input, textarea, select') || input;
+              if (focusEl && typeof focusEl.focus === 'function') {
+                focusEl.focus();
               }
-            });
+            }, 50);
           }
-          input.classList.remove('hidden');
-        }
+        };
+
+        setupInput();
+        setTimeout(setupInput, 100);
       }
-      let totalPrice = $refs.total.getAttribute('data-value');
-      if ("@js(feature(PaymentShortcutButton::class))" == 'true') {
+
+      let totalEl = document.querySelector('[x-ref="total"]');
+      let totalPrice = totalEl ? totalEl.getAttribute('data-value') : null;
+      if ("@js(feature(PaymentShortcutButton::class))" == 'true' && totalPrice) {
         generateButton(totalPrice);
       }
       modalOpened = true;
-    });
+    }
 
-    $wire.on('close-modal', (event) => {
+    function handleCloseModal(event) {
       if (input != undefined) {
         let titleModal = document.getElementById("titleEditDetail");
         if (titleModal) {
           titleModal.innerHTML = '@lang('Edit detail')';
         }
-        let container = input.closest('form')?.querySelector('.grid') || input.parentNode?.parentNode?.parentNode?.parentNode?.parentNode;
+        let container = input.closest('form')?.querySelector('.grid') || input.closest('.grid') || input.parentNode?.parentNode?.parentNode?.parentNode?.parentNode;
         if (container && container.children) {
           [...container.children].forEach((child) => {
             child.classList.remove('hidden');
@@ -788,7 +803,13 @@
         input = undefined;
       }
       modalOpened = false;
-    });
+    }
+
+    window.addEventListener('open-modal', handleOpenModal);
+    $wire.on('open-modal', handleOpenModal);
+
+    window.addEventListener('close-modal', handleCloseModal);
+    $wire.on('close-modal', handleCloseModal);
 
     // QR Scanner global variables and functions
     let html5QrcodeScanner = null;
