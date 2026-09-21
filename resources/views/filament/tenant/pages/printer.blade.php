@@ -86,6 +86,9 @@
               ...$wire.data,
               ...printer
             };
+            if (printer.show_currency !== undefined) {
+              $wire.data.show_currency = Boolean(printer.show_currency);
+            }
             if (printer.logo) {
               this.logoPreview = printer.logo;
               $wire.data.logo = printer.logo;
@@ -296,11 +299,15 @@
         $wire.data.driver = driver;
         $wire.data.paper_width = paperWidth;
 
+        const showCurrency = Boolean($wire.data.show_currency);
+        $wire.data.show_currency = showCurrency;
+
         const printerConfig = {
           ...$wire.data,
           driver: driver,
           paper_width: paperWidth,
           logo: this.logoPreview,
+          show_currency: showCurrency,
         };
 
         localStorage.setItem("printer", JSON.stringify(printerConfig));
@@ -311,6 +318,7 @@
           paper_width: paperWidth,
           logo: this.logoPreview,
           driver: driver,
+          show_currency: showCurrency,
         });
 
         new FilamentNotification()
@@ -329,11 +337,14 @@
           const paperWidthInput = document.querySelector('[name="data.paper_width"]');
           const paperWidth = paperWidthInput ? paperWidthInput.value : ($wire.data.paper_width || '58');
 
+          const showCurrency = Boolean($wire.data.show_currency);
+
           const printerConfig = {
             ...$wire.data,
             driver: driver,
             paper_width: paperWidth,
             logo: this.logoPreview,
+            show_currency: showCurrency,
           };
           const printer = new Printer(printerConfig);
           let printerAction = printer;
@@ -374,28 +385,28 @@
             .text('-------------------------------')
             .tableCustom([
               { text: 'Test 1'},
-              { text: moneyFormat(2000) + ' x 1', style: 'B'}
+              { text: formatReceiptMoney(2000, showCurrency) + ' x 1', style: 'B'}
             ])
             .align('right')
-            .text(moneyFormat(2000))
+            .text(formatReceiptMoney(2000, showCurrency))
             .tableCustom([
               { text: 'Test 2'},
-              { text: moneyFormat(5000) + ' x 1', style: 'B'}
+              { text: formatReceiptMoney(5000, showCurrency) + ' x 1', style: 'B'}
             ])
             .align('right')
-            .text(moneyFormat(5000))
+            .text(formatReceiptMoney(5000, showCurrency))
             .text('-------------------------------')
             .tableCustom([
               { text: 'Subtotal', style: 'B'},
-              { text: moneyFormat(7000), style: 'B'}
+              { text: formatReceiptMoney(7000, showCurrency), style: 'B'}
             ])
             .tableCustom([
               { text: 'Tax', style: 'B'},
-              { text: moneyFormat(0), style: 'B'}
+              { text: formatReceiptMoney(0, showCurrency), style: 'B'}
             ])
             .tableCustom([
               { text: 'Total price', style: 'B'},
-              { text: moneyFormat(7000), style: 'B'}
+              { text: formatReceiptMoney(7000, showCurrency), style: 'B'}
             ])
             .newLine()
             .align('center');

@@ -38,6 +38,7 @@ class Printer extends Page implements HasActions, HasForms
             'paper_width' => Setting::get('receipt_paper_width', '58'),
             'logo' => Setting::get('receipt_logo', null),
             'driver' => Setting::get('receipt_driver', 'serial'),
+            'show_currency' => (bool) Setting::get('receipt_show_currency', false),
         ]);
     }
 
@@ -93,6 +94,10 @@ class Printer extends Page implements HasActions, HasForms
                         ])
                         ->readOnly(),
                 ]),
+            Components\Toggle::make('show_currency')
+                ->label(__('Tampilkan Simbol Mata Uang di Struk'))
+                ->helperText(__('Jika dinonaktifkan, struk hanya mencetak nominal angka (contoh: 12.000) tanpa tulisan Rp/IDR.'))
+                ->default(false),
             Components\Textarea::make('footer')
                 ->rows(4)
                 ->translateLabel(),
@@ -141,6 +146,9 @@ class Printer extends Page implements HasActions, HasForms
         }
         if (array_key_exists('logo', $settings)) {
             Setting::set('receipt_logo', $settings['logo']);
+        }
+        if (array_key_exists('show_currency', $settings)) {
+            Setting::set('receipt_show_currency', (bool) $settings['show_currency']);
         }
     }
 }

@@ -129,6 +129,7 @@
     let selling = @js($record);
     let about = @js($about);
     const printerData = getPrinter();
+    const showCurrency = Boolean(printerData?.show_currency ?? @js(\App\Models\Tenants\Setting::get('receipt_show_currency', false)));
 
     try {
       if (!printerData) {
@@ -194,32 +195,32 @@
           .text('-------------------------------');
         selling.selling_details.forEach(sellingDetail => {
           let price = sellingDetail.price;
-          let text = moneyFormat(sellingDetail.price / sellingDetail.qty) + ' x ' + sellingDetail.qty.toString();
-          printerAction.table([sellingDetail.product.name, moneyFormat(sellingDetail.price / sellingDetail.qty) + ' x ' + sellingDetail.qty.toString()])
+          let text = formatReceiptMoney(sellingDetail.price / sellingDetail.qty, showCurrency) + ' x ' + sellingDetail.qty.toString();
+          printerAction.table([sellingDetail.product.name, formatReceiptMoney(sellingDetail.price / sellingDetail.qty, showCurrency) + ' x ' + sellingDetail.qty.toString()])
           if (sellingDetail.discount_price > 0) {
             price = price - sellingDetail.discount_price;
             printerAction
               .align('right')
-              .text(`(${moneyFormat(sellingDetail.discount_price)})`)
+              .text(`(${formatReceiptMoney(sellingDetail.discount_price, showCurrency)})`)
           }
           printerAction
             .align('right')
-            .text(moneyFormat(price))
+            .text(formatReceiptMoney(price, showCurrency))
             .align('left')
         });
         printerAction
           .text('-------------------------------');
         if("@js(feature(SellingTax::class))" == 'true') {
           printerAction.table(['@lang('Tax')', `${selling.tax}%`])
-            .table(['@lang('Tax price')', moneyFormat(selling.tax_price)]);
+            .table(['@lang('Tax price')', formatReceiptMoney(selling.tax_price, showCurrency)]);
         }
         printerAction
-          .table(['@lang('Subtotal')', moneyFormat(selling.total_price)])
-          .table(['@lang('Discount')', `(${moneyFormat(selling.total_discount_per_item + selling.discount_price)})`])
-          .table(['@lang('Total price')', moneyFormat(selling.grand_total_price)])
+          .table(['@lang('Subtotal')', formatReceiptMoney(selling.total_price, showCurrency)])
+          .table(['@lang('Discount')', `(${formatReceiptMoney(selling.total_discount_per_item + selling.discount_price, showCurrency)})`])
+          .table(['@lang('Total price')', formatReceiptMoney(selling.grand_total_price, showCurrency)])
           .text('-------------------------------')
-          .table(['@lang('Payed money')', moneyFormat(selling.payed_money)])
-          .table(['@lang('Change')', moneyFormat(selling.money_changes)])
+          .table(['@lang('Payed money')', formatReceiptMoney(selling.payed_money, showCurrency)])
+          .table(['@lang('Change')', formatReceiptMoney(selling.money_changes, showCurrency)])
           .align('center');
         if(printerData.footer != undefined) {
           printerAction

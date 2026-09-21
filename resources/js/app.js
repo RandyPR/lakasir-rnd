@@ -124,7 +124,37 @@ function moneyFormat(number, currency = null) {
 
   const formatter = new Intl.NumberFormat(activeLocale, options);
 
-  return formatter.format(number);
+  return formatter.format(number).replace(/\u00A0/g, ' ');
+}
+
+/**
+ * Formats a number for thermal receipt printing.
+ * - Uses Indonesian thousands separator (dot .) with zero decimals.
+ * - Guarantees standard ASCII spaces (no Unicode non-breaking space \u00A0)
+ *   so thermal ESC/POS printers never print corrupt characters like 'á'.
+ * - If showCurrency is true, prefixes with 'Rp ' (or active currency).
+ * - If showCurrency is false, prints clean numbers only (e.g. '12.000').
+ * 
+ * @param {number|string} number - The value to format.
+ * @param {boolean} showCurrency - Whether to include the currency prefix.
+ * @param {string|null} currency - Currency code (defaults to 'IDR').
+ * @returns {string} The formatted receipt string.
+ */
+function formatReceiptMoney(number, showCurrency = false, currency = null) {
+  const num = Number(number) || 0;
+  const activeCurrency = currency || window.lakasirCurrency || 'IDR';
+
+  const formatted = new Intl.NumberFormat('id-ID', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(num);
+
+  if (!showCurrency) {
+    return formatted;
+  }
+
+  const prefix = activeCurrency === 'IDR' ? 'Rp' : activeCurrency;
+  return `${prefix} ${formatted}`;
 }
 
 /**
@@ -139,4 +169,8 @@ function numberFormat(number) {
 
   return formatter.format(number);
 }
+
+window.formatReceiptMoney = formatReceiptMoney;
+window.moneyFormat = moneyFormat;
+window.numberFormat = numberFormat;
 
