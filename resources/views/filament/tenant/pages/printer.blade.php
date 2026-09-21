@@ -181,26 +181,105 @@
           alert('@lang('Web Bluetooth API tidak didukung di browser ini. Silakan gunakan Google Chrome atau Microsoft Edge.')');
           return;
         }
+
+        const bleServiceUuids = [
+          '000018f0-0000-1000-8000-00805f9b34fb',
+          'e7810a71-73ae-499d-8c15-faa9aef0c3f1',
+          '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+          '0000ff00-0000-1000-8000-00805f9b34fb',
+          '0000ae30-0000-1000-8000-00805f9b34fb',
+          '0000fee7-0000-1000-8000-00805f9b34fb',
+          '00001101-0000-1000-8000-00805f9b34fb',
+        ];
+
         try {
           const device = await navigator.bluetooth.requestDevice({
             acceptAllDevices: true,
-            optionalServices: [
-              '000018f0-0000-1000-8000-00805f9b34fb',
-              'e7810a71-73ae-499d-8c15-faa9aef0c3f1',
-              '49535343-fe7d-4ae5-8fa9-9fafd205e455',
-              '0000ff00-0000-1000-8000-00805f9b34fb',
-              '0000ae30-0000-1000-8000-00805f9b34fb',
-            ]
+            optionalServices: bleServiceUuids,
           });
 
-          if (device) {
-            $wire.data.printer = device.name || 'Bluetooth Printer (RPP02N / iware)';
-            $wire.data.printerId = device.id;
-            window.lakasirBluetoothDevice = device;
-            console.log('Bluetooth printer paired:', device.name, device.id);
+          if (!device) return;
+
+          // Verify GATT connection immediately so user knows if it works
+          let server = null;
+          let lastError = null;
+          const MAX_RETRIES = 3;
+
+          for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+              console.log(`GATT connect attempt ${attempt}/${MAX_RETRIES} to ${device.name}...`);
+              server = await device.gatt.connect();
+              console.log('GATT connected successfully');
+              break;
+            } catch (gattErr) {
+              lastError = gattErr;
+              console.warn(`GATT connect attempt ${attempt} failed:`, gattErr.message);
+              if (attempt < MAX_RETRIES) {
+                await new Promise(r => setTimeout(r, 1000 * attempt));
+              }
+            }
+          }
+
+          if (!server) {
+            const errMsg = lastError ? lastError.message : 'Unknown error';
+            new FilamentNotification()
+              .title(`@lang('Gagal connect ke Bluetooth printer setelah') ${MAX_RETRIES} @lang('percobaan'): ${errMsg}`)
+              .body('@lang('Pastikan printer hidup dan Bluetooth aktif. Coba matikan dan nyalakan kembali printer, lalu ulangi.')')
+              .danger()
+              .send();
+            return;
+          }
+
+          // Verify we can find a writable characteristic
+          let writeCharFound = false;
+          try {
+            const services = await server.getPrimaryServices();
+            for (const service of services) {
+              try {
+                const chars = await service.getCharacteristics();
+                for (const char of chars) {
+                  if (char.properties.writeWithoutResponse || char.properties.write) {
+                    writeCharFound = true;
+                    break;
+                  }
+                }
+              } catch (svcErr) {
+                // Continue scanning
+              }
+              if (writeCharFound) break;
+            }
+          } catch (discErr) {
+            console.warn('Service discovery warning:', discErr.message);
+          }
+
+          $wire.data.printer = device.name || 'Bluetooth Printer (RPP02N / iware)';
+          $wire.data.printerId = device.id;
+          window.lakasirBluetoothDevice = device;
+          window.lakasirBluetoothServer = server;
+          console.log('Bluetooth printer connected:', device.name, device.id);
+
+          if (writeCharFound) {
+            new FilamentNotification()
+              .title(`@lang('Berhasil connect ke') ${device.name || 'Bluetooth Printer'}`)
+              .success()
+              .send();
+          } else {
+            new FilamentNotification()
+              .title(`@lang('Terhubung ke') ${device.name || 'Bluetooth Printer'} @lang('tapi writable characteristic belum ditemukan')`)
+              .body('@lang('Printer mungkin masih bisa dipakai. Silakan coba Test Print.')')
+              .warning()
+              .send();
           }
         } catch (error) {
+          if (error.name === 'NotFoundError') {
+            // User cancelled the picker - not an error
+            return;
+          }
           console.error('Bluetooth pair error:', error);
+          new FilamentNotification()
+            .title('@lang('Gagal menghubungkan Bluetooth printer'): ' + (error.message || error))
+            .danger()
+            .send();
         }
       },
       async save() {

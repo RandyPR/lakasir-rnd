@@ -432,25 +432,33 @@ class Printer {
         throw new Error('Web Bluetooth API tidak didukung di browser ini. Gunakan Google Chrome atau Microsoft Edge.');
       }
 
+      const bleServiceUuids = [
+        '000018f0-0000-1000-8000-00805f9b34fb',
+        'e7810a71-73ae-499d-8c15-faa9aef0c3f1',
+        '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+        '0000ff00-0000-1000-8000-00805f9b34fb',
+        '0000ae30-0000-1000-8000-00805f9b34fb',
+        '0000fee7-0000-1000-8000-00805f9b34fb',
+        '00001101-0000-1000-8000-00805f9b34fb',
+      ];
+
       let device = window.lakasirBluetoothDevice;
 
       if (!device || !device.gatt?.connected) {
         if (navigator.bluetooth.getDevices) {
-          const devices = await navigator.bluetooth.getDevices();
-          device = devices.find(d => d.id === this.printerId) || devices[0];
+          try {
+            const devices = await navigator.bluetooth.getDevices();
+            device = devices.find(d => d.id === this.printerId) || devices[0];
+          } catch (getDevErr) {
+            console.warn('getDevices() failed, will prompt user:', getDevErr.message);
+          }
         }
       }
 
       if (!device) {
         device = await navigator.bluetooth.requestDevice({
           acceptAllDevices: true,
-          optionalServices: [
-            '000018f0-0000-1000-8000-00805f9b34fb',
-            'e7810a71-73ae-499d-8c15-faa9aef0c3f1',
-            '49535343-fe7d-4ae5-8fa9-9fafd205e455',
-            '0000ff00-0000-1000-8000-00805f9b34fb',
-            '0000ae30-0000-1000-8000-00805f9b34fb',
-          ]
+          optionalServices: bleServiceUuids,
         });
       }
 
@@ -461,8 +469,35 @@ class Printer {
 
       window.lakasirBluetoothDevice = device;
 
-      const server = device.gatt.connected ? device.gatt : await device.gatt.connect();
+      // Connect to GATT with retry logic
+      let server = window.lakasirBluetoothServer;
+      if (!server || !device.gatt?.connected) {
+        server = null;
+        const MAX_RETRIES = 3;
+        let lastError = null;
 
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            console.log(`GATT connect attempt ${attempt}/${MAX_RETRIES} to ${device.name}...`);
+            server = await device.gatt.connect();
+            console.log('GATT connected successfully');
+            break;
+          } catch (gattErr) {
+            lastError = gattErr;
+            console.warn(`GATT connect attempt ${attempt} failed:`, gattErr.message);
+            if (attempt < MAX_RETRIES) {
+              await new Promise(r => setTimeout(r, 1000 * attempt));
+            }
+          }
+        }
+
+        if (!server) {
+          throw new Error('Gagal connect GATT ke printer setelah ' + MAX_RETRIES + ' percobaan: ' + (lastError?.message || 'Unknown'));
+        }
+        window.lakasirBluetoothServer = server;
+      }
+
+      // Find writable characteristic
       let writeChar = null;
       const services = await server.getPrimaryServices();
 
@@ -482,10 +517,13 @@ class Printer {
       }
 
       if (!writeChar) {
-        throw new Error('Tidak ditemukan characteristic tulis BLE pada printer ini.');
+        throw new Error('Tidak ditemukan characteristic tulis BLE pada printer ini. Pastikan printer menyala dan coba ulang.');
       }
 
-      const CHUNK_SIZE = 100;
+      // Send data in small chunks for RPP02N BLE compatibility
+      // BLE default MTU is 23 bytes (20 payload), use small chunks for reliability
+      const CHUNK_SIZE = 20;
+      const CHUNK_DELAY = 50;
       for (let offset = 0; offset < data.length; offset += CHUNK_SIZE) {
         const chunk = data.slice(offset, offset + CHUNK_SIZE);
         if (writeChar.properties.writeWithoutResponse) {
@@ -494,7 +532,7 @@ class Printer {
           await writeChar.writeValue(chunk);
         }
         if (offset + CHUNK_SIZE < data.length) {
-          await new Promise(r => setTimeout(r, 20));
+          await new Promise(r => setTimeout(r, CHUNK_DELAY));
         }
       }
 
@@ -502,6 +540,8 @@ class Printer {
       this.clearCommands();
     } catch (e) {
       console.error('Bluetooth print error:', e);
+      // Reset cached server on failure so next attempt reconnects fresh
+      window.lakasirBluetoothServer = null;
       if (typeof FilamentNotification !== 'undefined') {
         new FilamentNotification()
           .title('Gagal mencetak ke Bluetooth printer: ' + (e.message || e))
