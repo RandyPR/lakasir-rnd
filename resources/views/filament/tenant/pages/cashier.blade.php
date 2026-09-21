@@ -173,6 +173,12 @@
                 </div>
               </template>
             </div>
+            <x-filament::input.wrapper class="mb-2">
+              <x-slot name="prefix">
+                {{ __('Customer') }}
+              </x-slot>
+              <x-filament::input type="text" wire:model="cartDetail.customer_name" placeholder="{{ __('Customer Name (Optional)') }}" />
+            </x-filament::input.wrapper>
             <x-filament::input.wrapper
               x-show="paymentMethods.filter((pm) => pm.is_credit)[0]?.id == cartDetail['payment_method_id']"
               :valid="!$errors->has('due_date')" class="mb-2">

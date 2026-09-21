@@ -118,9 +118,14 @@ class Cashier extends Page implements HasForms, HasTable
         $this->tableOption = Table::select('id', 'number')->get();
 
         $this->storeCartForm->fill([
+            'customer_name' => null,
             'payment_method_id' => 1,
             'total_price' => $this->total_price,
             'friend_price' => false,
+            'voucher' => null,
+            'discount_price' => 0,
+            'note' => null,
+            'member_id' => null,
         ]);
 
         $this->fillPayemntMethod();
@@ -158,6 +163,7 @@ class Cashier extends Page implements HasForms, HasTable
                     ->label(__('Customer Name'))
                     ->hiddenLabel()
                     ->placeholder(__('Enter customer name'))
+                    ->live(onBlur: true)
                     ->extraAttributes([
                         'id' => 'customerNameInput',
                         'class' => 'hidden',
@@ -193,18 +199,27 @@ class Cashier extends Page implements HasForms, HasTable
 
     public function storeCart(): void
     {
-        if ($this->cartDetail['voucher']) {
+        try {
+            $state = $this->storeCartForm->getState();
+            $this->cartDetail = array_merge($this->cartDetail, array_filter($state, fn ($v) => ! is_null($v)));
+        } catch (\Throwable $e) {
+        }
+
+        if (! empty($this->cartDetail['voucher'])) {
             $this->validateVoucher($this->cartDetail['voucher']);
         }
 
-        if ($discount_price = str_replace(',', '', $this->cartDetail['discount_price'])) {
-            $this->cartItems->each(function (CartItem $item) {
-                if ($item->discount_price && $item->discount_price > 0) {
-                    $this->discount_price += $item->discount_price;
-                }
-            });
-            $this->discount_price += floatval($discount_price);
-            $this->total_price = $this->sub_total + ($this->sub_total * $this->tax / 100) - $this->discount_price;
+        if (! empty($this->cartDetail['discount_price'])) {
+            $discount_price = str_replace(',', '', (string) $this->cartDetail['discount_price']);
+            if ($discount_price) {
+                $this->cartItems->each(function (CartItem $item) {
+                    if ($item->discount_price && $item->discount_price > 0) {
+                        $this->discount_price += $item->discount_price;
+                    }
+                });
+                $this->discount_price += floatval($discount_price);
+                $this->total_price = $this->sub_total + ($this->sub_total * $this->tax / 100) - $this->discount_price;
+            }
         }
         $this->fillMember();
         $this->fillPayemntMethod();
@@ -232,12 +247,18 @@ class Cashier extends Page implements HasForms, HasTable
 
     public function proceedThePayment(SellingService $sellingService): void
     {
+        try {
+            $state = $this->storeCartForm->getState();
+            $this->cartDetail = array_merge($this->cartDetail, array_filter($state, fn ($v) => ! is_null($v)));
+        } catch (\Throwable $e) {
+        }
+
         $this->cartDetail = array_merge($this->cartDetail, [
             'total_price' => $this->total_price,
         ]);
 
         $request = array_merge($this->cartDetail, [
-            'discount_price' => floatval(str_replace(',', '', $this->cartDetail['discount_price'])),
+            'discount_price' => floatval(str_replace(',', '', (string) ($this->cartDetail['discount_price'] ?? 0))),
             'products' => $this->cartItems->map(function (CartItem $cartItem) {
                 return [
                     'product_id' => $cartItem->product_id,

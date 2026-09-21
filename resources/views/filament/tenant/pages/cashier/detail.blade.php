@@ -19,6 +19,7 @@
       x-on:mousedown="$dispatch('open-modal', {
         id: 'edit-detail',
         inputId: 'customerNameInput',
+        index: 1,
         title: '@lang('Customer name')'
       })">
     <p>{{ __('Customer') }}</p>
@@ -26,10 +27,10 @@
   </div>
   <div class="flex justify-between hover:underline cursor-pointer"
       x-on:mousedown="$dispatch('open-modal', {
-       id: 'edit-detail',
-       inputId: 'noteInput',
-       index: 1,
-       title: '@lang('Note')'
+        id: 'edit-detail',
+        inputId: 'noteInput',
+        index: 2,
+        title: '@lang('Note')'
       })">
     <p>{{ __('Note') }}</p>
     <div>{!! $cartDetail['note'] ?? '-' !!}</div>
@@ -73,7 +74,7 @@
       x-on:mousedown="$dispatch('open-modal', {
         id: 'edit-detail',
         inputId: 'discountInput',
-        index: 3,
+        index: 4,
         title: '@lang('Discount')'
       })">
     <p>{{ __('Discount') }}</p>
