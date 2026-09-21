@@ -119,13 +119,7 @@ class Printer {
     if (!imageSrc) return this;
 
     const paperMaxDots = this.paperWidth === 80 ? 576 : 384;
-    // For Bluetooth BLE, limit image width to 200px to reduce data size
-    // This keeps raster data under ~1.5KB for fast BLE transfer
-    const bleMaxWidth = 200;
-    let targetMaxWidth = maxWidth ? Math.min(maxWidth, paperMaxDots) : paperMaxDots;
-    if (this.driver === 'bluetooth') {
-      targetMaxWidth = Math.min(targetMaxWidth, bleMaxWidth);
-    }
+    const targetMaxWidth = maxWidth ? Math.min(maxWidth, paperMaxDots) : paperMaxDots;
 
     return new Promise((resolve) => {
       const img = new Image();
@@ -600,11 +594,10 @@ class Printer {
         throw new Error('Tidak ditemukan characteristic tulis BLE pada printer ini. Pastikan printer menyala dan coba ulang.');
       }
 
-      // Step 5: Send data in chunks
-      // Chrome Web Bluetooth handles MTU negotiation automatically.
-      // RPP02N supports MTU up to 512 bytes, so 100-byte chunks are safe and fast.
-      const CHUNK_SIZE = 100;
-      const CHUNK_DELAY = 30;
+      // Step 5: Send data in small chunks for RPP02N BLE compatibility
+      // BLE default MTU is 23 bytes (20 payload), use small chunks for reliability
+      const CHUNK_SIZE = 20;
+      const CHUNK_DELAY = 50;
       for (let offset = 0; offset < data.length; offset += CHUNK_SIZE) {
         const chunk = data.slice(offset, offset + CHUNK_SIZE);
         if (writeChar.properties.writeWithoutResponse) {

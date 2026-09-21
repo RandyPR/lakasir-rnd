@@ -146,7 +146,7 @@
         const printer = new Printer(printerData);
         let printerAction = printer;
         const logo = printerData.logo || @js(Setting::get('receipt_logo'));
-        if (logo) {
+        if (logo && printerData.driver !== 'bluetooth') {
           await printerAction.image(logo, printerData.paper_width || @js(Setting::get('receipt_paper_width', '58')));
         }
         printerAction.font('a');
