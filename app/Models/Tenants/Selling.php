@@ -27,16 +27,20 @@ class Selling extends Model
     {
         static::creating(function (Selling $selling) {
             if (empty($selling->daily_order_number)) {
-                $targetDate = $selling->date 
-                    ? \Illuminate\Support\Carbon::parse($selling->date)->toDateString() 
-                    : ($selling->created_at ? $selling->created_at->toDateString() : now()->toDateString());
+                try {
+                    $targetDate = $selling->date 
+                        ? \Illuminate\Support\Carbon::parse($selling->date)->toDateString() 
+                        : ($selling->created_at ? $selling->created_at->toDateString() : now()->toDateString());
 
-                $max = static::whereDate('date', $targetDate)->max('daily_order_number');
-                if (! $max) {
-                    $max = static::whereDate('created_at', $targetDate)->max('daily_order_number');
+                    $max = static::whereDate('date', $targetDate)->max('daily_order_number');
+                    if (! $max) {
+                        $max = static::whereDate('created_at', $targetDate)->max('daily_order_number');
+                    }
+
+                    $selling->daily_order_number = ($max ?? 0) + 1;
+                } catch (\Throwable $e) {
+                    unset($selling->daily_order_number);
                 }
-
-                $selling->daily_order_number = ($max ?? 0) + 1;
             }
         });
     }

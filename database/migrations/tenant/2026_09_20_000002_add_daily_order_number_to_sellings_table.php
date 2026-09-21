@@ -12,7 +12,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('sellings', function (Blueprint $table) {
-            $table->unsignedInteger('daily_order_number')->nullable()->after('customer_name')->index();
+            if (! Schema::hasColumn('sellings', 'daily_order_number')) {
+                $column = $table->unsignedInteger('daily_order_number')->nullable()->index();
+                if (Schema::hasColumn('sellings', 'customer_name')) {
+                    $column->after('customer_name');
+                }
+            }
         });
     }
 
@@ -22,8 +27,10 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('sellings', function (Blueprint $table) {
-            $table->dropIndex(['daily_order_number']);
-            $table->dropColumn('daily_order_number');
+            if (Schema::hasColumn('sellings', 'daily_order_number')) {
+                $table->dropIndex(['daily_order_number']);
+                $table->dropColumn('daily_order_number');
+            }
         });
     }
 };
