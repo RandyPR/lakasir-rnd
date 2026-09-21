@@ -338,8 +338,12 @@
           const printer = new Printer(printerConfig);
           let printerAction = printer;
 
-          if (this.logoPreview) {
+          // Skip image for Bluetooth BLE - raster data is too large for BLE bandwidth
+          // and causes connection timeout. Image works fine on Serial/USB/Browser drivers.
+          if (this.logoPreview && driver !== 'bluetooth') {
             await printerAction.image(this.logoPreview, paperWidth || 58);
+          } else if (this.logoPreview && driver === 'bluetooth') {
+            console.log('Skipping logo image for Bluetooth BLE (data too large for BLE bandwidth)');
           }
 
           printerAction.font('a')
@@ -405,6 +409,10 @@
             .print();
         } catch (e) {
           console.error('Test print error:', e);
+          new FilamentNotification()
+            .title('@lang('Test print gagal'): ' + (e.message || e))
+            .danger()
+            .send();
         }
       }
     }))

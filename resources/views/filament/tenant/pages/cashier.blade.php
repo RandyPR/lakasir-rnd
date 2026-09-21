@@ -495,7 +495,7 @@
           const printer = new Printer(printerData);
           let printerAction = printer;
           const logo = printerData.logo || window.lakasirReceiptLogo;
-          if (logo) {
+          if (logo && printerData.driver !== 'bluetooth') {
             await printerAction.image(logo, printerData.paper_width || window.lakasirReceiptPaperWidth || 58);
           }
           printerAction.font('a');
