@@ -54,16 +54,27 @@ class SellingResource extends Resource
                                 ->orWhere('name', 'like', "%{$search}%");
                         });
                     }),
-                TextColumn::make('member.name')
-                    ->translateLabel()
-                    ->default('-'),
-                TextColumn::make('customer_number')
-                    ->translateLabel()
-                    ->default('-'),
                 TextColumn::make('customer_name')
-                    ->translateLabel()
-                    ->searchable()
-                    ->default('-'),
+                    ->label(__('Customer'))
+                    ->state(function (Selling $record): string {
+                        if ($record->member?->name) {
+                            return $record->member->name . ' (Member)';
+                        }
+
+                        return $record->customer_name ?: '-';
+                    })
+                    ->description(fn (Selling $record): ?string => $record->customer_number ?: null)
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query->where(function (Builder $query) use ($search) {
+                            $query->where('customer_name', 'like', "%{$search}%")
+                                ->orWhere('customer_number', 'like', "%{$search}%")
+                                ->orWhereHas('member', function (Builder $query) use ($search) {
+                                    $query->where('name', 'like', "%{$search}%")
+                                        ->orWhere('email', 'like', "%{$search}%")
+                                        ->orWhere('code', 'like', "%{$search}%");
+                                });
+                        });
+                    }),
                 TextColumn::make('date')
                     ->dateTime(timezone: Profile::get()->timezone)
                     ->translateLabel(),
@@ -86,7 +97,7 @@ class SellingResource extends Resource
                     ->visible(feature(ProductInitialPrice::class))
                     ->money(Setting::get('currency', 'IDR')),
             ])
-            ->searchPlaceholder('Search (Code, User, Customer Name, Customer Number)')
+            ->searchPlaceholder('Search (Code, User, Customer, Customer Number)')
             ->header(view('filament.tenant.resources.sellings.headers.overview', [
                 'start_date' => request()->input('tableFilters.date.start_date'),
                 'end_date' => request()->input('tableFilters.date.end_date'),
@@ -133,6 +144,11 @@ class SellingResource extends Resource
                     }),
             ])
             ->deferFilters();
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->with(['member', 'user']);
     }
 
     public static function getPages(): array
