@@ -125,6 +125,16 @@
 
     window.location.reload();
   });
+  function formatReceiptMoney(number, showCurrency = false) {
+    const num = Number(number) || 0;
+    const formatted = new Intl.NumberFormat('id-ID', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(num);
+
+    return showCurrency ? ('Rp ' + formatted) : formatted;
+  }
+
   document.getElementById('printButton').addEventListener('click', async () => {
     let selling = @js($record);
     let about = @js($about);
@@ -235,6 +245,12 @@
       }
     } catch (error) {
       console.error(error);
+      if (typeof FilamentNotification !== 'undefined') {
+        new FilamentNotification()
+          .title('@lang('Gagal mencetak'): ' + (error.message || error))
+          .danger()
+          .send();
+      }
     }
   });
 </script>

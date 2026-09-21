@@ -15,9 +15,6 @@ class Printer {
   }
 
   addCommand(command) {
-    if (typeof command === 'string') {
-      command = command.replace(/\u00A0/g, ' ');
-    }
     this.commands += command;
     this.bufferChunks.push(command);
   }
@@ -71,13 +68,12 @@ class Printer {
 
   table(data) {
     let row = '';
-    const cleanData = data.map(text => String(text).replace(/\u00A0/g, ' '));
-    const totalTextLength = cleanData.reduce((sum, text) => sum + text.length, 0);
+    const totalTextLength = data.reduce((sum, text) => sum + String(text).length, 0);
     const totalPadding = Math.max(1, this.lineWidth - totalTextLength);
 
-    cleanData.forEach((text, index) => {
+    data.forEach((text, index) => {
       row += text;
-      if (index < cleanData.length - 1) {
+      if (index < data.length - 1) {
         for (let i = 0; i < totalPadding; i++) {
           row += ' ';
         }
@@ -89,18 +85,14 @@ class Printer {
   }
 
   tableCustom(data) {
-    const cleanData = data.map(cell => ({
-      ...cell,
-      text: String(cell.text || '').replace(/\u00A0/g, ' ')
-    }));
-    const totalTextLength = cleanData.reduce((sum, cell) => sum + cell.text.length, 0);
+    const totalTextLength = data.reduce((sum, cell) => sum + String(cell.text).length, 0);
     const totalPadding = Math.max(1, this.lineWidth - totalTextLength);
     let row = '';
 
-    cleanData.forEach((cell, index) => {
+    data.forEach((cell, index) => {
       let style = cell.style === 'B' ? '\x1b\x45\x01' : '\x1b\x45\x00';
       row += style + cell.text;
-      if (index < cleanData.length - 1) {
+      if (index < data.length - 1) {
         for (let i = 0; i < totalPadding; i++) {
           row += ' ';
         }
@@ -227,8 +219,7 @@ class Printer {
       if (chunk instanceof Uint8Array) {
         return chunk;
       }
-      const sanitized = typeof chunk === 'string' ? chunk.replace(/\u00A0/g, ' ') : chunk;
-      return encoder.encode(sanitized);
+      return encoder.encode(chunk);
     });
 
     const totalLength = parts.reduce((acc, curr) => acc + curr.length, 0);

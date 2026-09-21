@@ -71,6 +71,16 @@
 </x-filament-panels::page>
 @script()
   <script>
+    function formatReceiptMoney(number, showCurrency = false) {
+      const num = Number(number) || 0;
+      const formatted = new Intl.NumberFormat('id-ID', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(num);
+
+      return showCurrency ? ('Rp ' + formatted) : formatted;
+    }
+
     Alpine.data('printer', () => ({
       logoPreview: null,
       isSecure: window.isSecureContext,
