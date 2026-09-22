@@ -37,6 +37,8 @@ class ViewSelling extends ViewRecord
                 ->icon('heroicon-s-printer')
                 ->extraAttributes([
                     'id' => 'printInvoice',
+                    'type' => 'button',
+                    'x-on:click.prevent.stop' => 'window.handlePrintInvoice && window.handlePrintInvoice()',
                 ])
                 ->color(Color::Teal)
                 ->visible(can('can print selling') && feature(PrintSellingA5::class)),
@@ -44,6 +46,8 @@ class ViewSelling extends ViewRecord
                 ->icon('heroicon-s-printer')
                 ->extraAttributes([
                     'id' => 'printButton',
+                    'type' => 'button',
+                    'x-on:click.prevent.stop' => 'window.handlePrintReceipt && window.handlePrintReceipt()',
                 ])
                 ->visible(can('can print selling')),
         ];

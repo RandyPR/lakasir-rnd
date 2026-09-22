@@ -581,7 +581,7 @@
     </div>
     <x-slot name="footer">
       <div class="grid grid-cols-2 gap-x-2">
-        <x-filament::button icon="heroicon-m-printer" id="printReceiptButton">
+        <x-filament::button icon="heroicon-m-printer" id="printReceiptButton" type="button" x-on:click.prevent.stop="handleCashierPrintReceipt">
           {{ __('Print') }}
         </x-filament::button>
         <x-filament::button color="gray" x-on:click="$dispatch('close-modal', {id: 'success-modal'})">
@@ -974,11 +974,10 @@
       }
     }
 
-    // Guard against duplicate listeners
+    window.handleCashierPrintReceipt = handleCashierPrintReceipt;
     const printReceiptBtn = document.getElementById("printReceiptButton");
     if (printReceiptBtn) {
-      printReceiptBtn.removeEventListener('click', handleCashierPrintReceipt);
-      printReceiptBtn.addEventListener('click', handleCashierPrintReceipt);
+      printReceiptBtn.onclick = handleCashierPrintReceipt;
     }
 
     Alpine.data('fullscreen', () => {

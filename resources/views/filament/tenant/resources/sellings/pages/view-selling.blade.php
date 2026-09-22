@@ -113,21 +113,21 @@
 </x-filament-panels::page>
 @script()
 <script>
-  console.log(@js($record));
+  let isPrintingInvoice = false;
+  let isPrintingReceipt = false;
 
-  // Guard against duplicate listeners by using named functions and removing before re-adding
-  const printInvoiceEl = document.getElementById('printInvoice');
-  const printButtonEl = document.getElementById('printButton');
-
-  function handlePrintInvoice() {
-    const printContents = document.getElementById("printElement").innerHTML;
-
-    document.body.innerHTML = printContents;
-
-    window.print();
-
-    window.location.reload();
-  }
+  window.handlePrintInvoice = function() {
+    if (isPrintingInvoice) return;
+    isPrintingInvoice = true;
+    try {
+      const printContents = document.getElementById("printElement").innerHTML;
+      document.body.innerHTML = printContents;
+      window.print();
+      window.location.reload();
+    } finally {
+      setTimeout(() => { isPrintingInvoice = false; }, 2000);
+    }
+  };
 
   function formatReceiptMoney(number, showCurrency = false) {
     const num = Number(number) || 0;
@@ -139,7 +139,13 @@
     return showCurrency ? ('Rp ' + formatted) : formatted;
   }
 
-  async function handlePrintReceipt() {
+  window.handlePrintReceipt = async function() {
+    if (isPrintingReceipt || window._lakasirIsPrintingNow) {
+      console.warn('Receipt print already in progress, skipping duplicate invocation.');
+      return;
+    }
+    isPrintingReceipt = true;
+
     let selling = @js($record);
     let about = @js($about);
     const printerData = getPrinter();
@@ -156,97 +162,98 @@
               .button()
               .url('/member/printer'),
           ])
-          .send()
-      } else {
-        const printer = new Printer(printerData);
-        let printerAction = printer;
-        const logo = printerData.logo || @js(Setting::get('receipt_logo'));
-        if (logo && printerData.driver !== 'bluetooth') {
-          await printerAction.image(logo, printerData.paper_width || @js(Setting::get('receipt_paper_width', '58')));
-        }
-        printerAction.font('a');
-        if(about != undefined || about != null) {
-          printerAction.size(1)
-            .align('center')
-            .text(about.shop_name)
-            .size(0)
-            .text(about.shop_location);
-          if(printerData.header != undefined) {
-            printerAction
-              .text(printerData.header);
-          }
-        }
+          .send();
+        return;
+      }
 
-        if (selling.daily_order_number || selling.formatted_daily_order_number) {
-          const orderLabel = selling.formatted_daily_order_number || ('Order #' + String(selling.daily_order_number).padStart(3, '0'));
-          printerAction
-            .align('center')
-            .size(1, 1)
-            .style('bold')
-            .text(orderLabel)
-            .style('normal')
-            .size(0, 0);
+      const printer = new Printer(printerData);
+      let printerAction = printer;
+      const logo = printerData.logo || @js(Setting::get('receipt_logo'));
+      if (logo && printerData.driver !== 'bluetooth') {
+        await printerAction.image(logo, printerData.paper_width || @js(Setting::get('receipt_paper_width', '58')));
+      }
+      printerAction.font('a');
+      if (about != undefined || about != null) {
+        printerAction.size(1)
+          .align('center')
+          .text(about.shop_name)
+          .size(0)
+          .text(about.shop_location);
+        if (printerData.header != undefined) {
+          printerAction.text(printerData.header);
         }
+      }
 
-        printerAction.align('left')
-          .text('-------------------------------');
-
-        printerAction.table(['@lang('Cashier')', selling.user.name]);
-        if(selling.table != undefined && selling.table != null) {
-          printerAction.table(['@lang('Table')', selling.table.number]);
-        }
-        printerAction.table(['@lang('Payment method')', selling.payment_method.name]);
-
-        let customerDisplay = '@lang('General')';
-        if (selling.customer_name) {
-          customerDisplay = selling.customer_name;
-        } else if (selling.member && selling.member.name) {
-          customerDisplay = selling.member.name;
-        }
-        printerAction.table(['@lang('Customer')', customerDisplay]);
-
+      if (selling.daily_order_number || selling.formatted_daily_order_number) {
+        const orderLabel = selling.formatted_daily_order_number || ('Order #' + String(selling.daily_order_number).padStart(3, '0'));
         printerAction
-          .text('-------------------------------');
+          .align('center')
+          .size(1, 1)
+          .style('bold')
+          .text(orderLabel)
+          .style('normal')
+          .size(0, 0);
+      }
+
+      printerAction.align('left')
+        .text('-------------------------------');
+
+      printerAction.table(['@lang('Cashier')', selling.user?.name || '']);
+      if (selling.table != undefined && selling.table != null) {
+        printerAction.table(['@lang('Table')', selling.table.number]);
+      }
+      printerAction.table(['@lang('Payment method')', selling.payment_method?.name || 'Cash']);
+
+      let customerDisplay = '@lang('General')';
+      if (selling.customer_name) {
+        customerDisplay = selling.customer_name;
+      } else if (selling.member && selling.member.name) {
+        customerDisplay = selling.member.name;
+      }
+      printerAction.table(['@lang('Customer')', customerDisplay]);
+
+      printerAction.text('-------------------------------');
+      if (selling.selling_details && Array.isArray(selling.selling_details)) {
         selling.selling_details.forEach(sellingDetail => {
           let price = sellingDetail.price;
-          let text = formatReceiptMoney(sellingDetail.price / sellingDetail.qty, showCurrency) + ' x ' + sellingDetail.qty.toString();
-          printerAction.table([sellingDetail.product.name, formatReceiptMoney(sellingDetail.price / sellingDetail.qty, showCurrency) + ' x ' + sellingDetail.qty.toString()])
+          let qty = sellingDetail.qty || 1;
+          let unitPrice = price / qty;
+          let productName = sellingDetail.product?.name || '';
+          printerAction.table([productName, formatReceiptMoney(unitPrice, showCurrency) + ' x ' + qty.toString()]);
           if (sellingDetail.discount_price > 0) {
             price = price - sellingDetail.discount_price;
             printerAction
               .align('right')
-              .text(`(${formatReceiptMoney(sellingDetail.discount_price, showCurrency)})`)
+              .text(`(${formatReceiptMoney(sellingDetail.discount_price, showCurrency)})`);
           }
           printerAction
             .align('right')
             .text(formatReceiptMoney(price, showCurrency))
-            .align('left')
+            .align('left');
         });
-        printerAction
-          .text('-------------------------------');
-        if("@js(feature(SellingTax::class))" == 'true') {
-          printerAction.table(['@lang('Tax')', `${selling.tax}%`])
-            .table(['@lang('Tax price')', formatReceiptMoney(selling.tax_price, showCurrency)]);
-        }
-        printerAction
-          .table(['@lang('Subtotal')', formatReceiptMoney(selling.total_price, showCurrency)])
-          .table(['@lang('Discount')', `(${formatReceiptMoney(selling.total_discount_per_item + selling.discount_price, showCurrency)})`])
-          .table(['@lang('Total price')', formatReceiptMoney(selling.grand_total_price, showCurrency)])
-          .text('-------------------------------')
-          .table(['@lang('Payed money')', formatReceiptMoney(selling.payed_money, showCurrency)])
-          .table(['@lang('Change')', formatReceiptMoney(selling.money_changes, showCurrency)])
-          .align('center');
-        if(printerData.footer != undefined) {
-          printerAction
-            .text(printerData.footer);
-        }
-        printerAction.align('left')
-          .text('copy');
-
-        await printerAction
-          .cut()
-          .print();
       }
+      printerAction.text('-------------------------------');
+      if ("@js(feature(SellingTax::class))" == 'true') {
+        printerAction.table(['@lang('Tax')', `${selling.tax}%`])
+          .table(['@lang('Tax price')', formatReceiptMoney(selling.tax_price, showCurrency)]);
+      }
+      printerAction
+        .table(['@lang('Subtotal')', formatReceiptMoney(selling.total_price, showCurrency)])
+        .table(['@lang('Discount')', `(${formatReceiptMoney(selling.total_discount_per_item + selling.discount_price, showCurrency)})`])
+        .table(['@lang('Total price')', formatReceiptMoney(selling.grand_total_price, showCurrency)])
+        .text('-------------------------------')
+        .table(['@lang('Payed money')', formatReceiptMoney(selling.payed_money, showCurrency)])
+        .table(['@lang('Change')', formatReceiptMoney(selling.money_changes, showCurrency)])
+        .align('center');
+      if (printerData.footer != undefined) {
+        printerAction.text(printerData.footer);
+      }
+      printerAction.align('left')
+        .text('copy');
+
+      await printerAction
+        .cut()
+        .print();
     } catch (error) {
       console.error(error);
       if (typeof FilamentNotification !== 'undefined') {
@@ -255,17 +262,20 @@
           .danger()
           .send();
       }
+    } finally {
+      setTimeout(() => {
+        isPrintingReceipt = false;
+      }, 2000);
     }
-  }
+  };
 
-  // Remove any previously attached listeners before adding new ones
+  const printInvoiceEl = document.getElementById('printInvoice');
+  const printButtonEl = document.getElementById('printButton');
   if (printInvoiceEl) {
-    printInvoiceEl.removeEventListener('click', handlePrintInvoice);
-    printInvoiceEl.addEventListener('click', handlePrintInvoice);
+    printInvoiceEl.onclick = window.handlePrintInvoice;
   }
   if (printButtonEl) {
-    printButtonEl.removeEventListener('click', handlePrintReceipt);
-    printButtonEl.addEventListener('click', handlePrintReceipt);
+    printButtonEl.onclick = window.handlePrintReceipt;
   }
 </script>
 @endscript

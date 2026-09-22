@@ -259,17 +259,29 @@ class Printer {
   }
 
   async print() {
-    const data = this.getBinaryData();
-    console.log(`Printing via driver '${this.driver}', total bytes: ${data.length}`);
+    if (window._lakasirIsPrintingNow) {
+      console.warn('Another print job is currently in progress, skipping duplicate print call.');
+      return;
+    }
+    window._lakasirIsPrintingNow = true;
 
-    if (this.driver === 'serial') {
-      await this.printToSerial(data);
-    } else if (this.driver === 'bluetooth') {
-      await this.printToBluetooth(data);
-    } else if (this.driver === 'browser') {
-      this.printToBrowser();
-    } else {
-      await this.printToUSB(data);
+    try {
+      const data = this.getBinaryData();
+      console.log(`Printing via driver '${this.driver}', total bytes: ${data.length}`);
+
+      if (this.driver === 'serial') {
+        await this.printToSerial(data);
+      } else if (this.driver === 'bluetooth') {
+        await this.printToBluetooth(data);
+      } else if (this.driver === 'browser') {
+        this.printToBrowser();
+      } else {
+        await this.printToUSB(data);
+      }
+    } finally {
+      setTimeout(() => {
+        window._lakasirIsPrintingNow = false;
+      }, 1500);
     }
   }
 
