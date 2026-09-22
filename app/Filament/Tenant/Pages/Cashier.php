@@ -105,8 +105,30 @@ class Cashier extends Page implements HasForms, HasTable
 
         $this->calculateTotalPrice();
 
+        $cash = PaymentMethod::firstOrCreate(
+            ['name' => 'Cash'],
+            [
+                'is_cash' => true,
+                'is_debit' => false,
+                'is_credit' => false,
+                'is_wallet' => false,
+                'icon' => 'assets/images/payment-methods/cash.png',
+            ]
+        );
+
+        PaymentMethod::firstOrCreate(
+            ['name' => 'QRIS'],
+            [
+                'is_cash' => false,
+                'is_debit' => false,
+                'is_credit' => false,
+                'is_wallet' => true,
+                'icon' => 'assets/images/payment-methods/qris.png',
+            ]
+        );
+
         $this->paymentMethods = PaymentMethod::query()
-            ->select('id', 'name', 'is_credit')
+            ->select('id', 'name', 'is_cash', 'is_credit', 'is_wallet', 'is_debit')
             ->get()
             ->toArray();
 
@@ -119,7 +141,7 @@ class Cashier extends Page implements HasForms, HasTable
 
         $this->storeCartForm->fill([
             'customer_name' => null,
-            'payment_method_id' => 1,
+            'payment_method_id' => $cash->id,
             'total_price' => $this->total_price,
             'friend_price' => false,
             'voucher' => null,
@@ -128,6 +150,7 @@ class Cashier extends Page implements HasForms, HasTable
             'member_id' => null,
         ]);
 
+        $this->cartDetail['payment_method_id'] = $cash->id;
         $this->cartDetail['table_id'] = null;
         $this->cartDetail['table_label'] = null;
 
@@ -326,15 +349,24 @@ class Cashier extends Page implements HasForms, HasTable
 
         $pMethod = PaymentMethod::find($request['payment_method_id']);
         if (! $pMethod) {
-            $pMethod = PaymentMethod::create([
+            $pMethod = PaymentMethod::firstOrCreate([
                 'name' => 'Cash',
+            ], [
                 'is_cash' => true,
                 'is_debit' => false,
                 'is_credit' => false,
                 'is_wallet' => false,
                 'icon' => 'assets/images/payment-methods/cash.png',
             ]);
+            $request['payment_method_id'] = $pMethod->id;
         }
+
+        // For non-cash methods (QRIS, wallet, debit), exact payment is guaranteed
+        if ($pMethod->is_wallet || $pMethod->is_debit || ! $pMethod->is_cash) {
+            $request['payed_money'] = $this->total_price;
+            $request['money_changes'] = 0;
+        }
+
         $validator = Validator::make($request, [
             'fee' => ['numeric'],
             'payment_method_id' => ['required'],
@@ -370,6 +402,8 @@ class Cashier extends Page implements HasForms, HasTable
 
         $this->mount();
 
+        $this->dispatch('close-modal', id: 'proceed-the-payment');
+        $this->dispatch('open-modal', id: 'success-modal');
         $this->dispatch('selling-created', selling: $selling->load('sellingDetails.product', 'table'));
     }
 

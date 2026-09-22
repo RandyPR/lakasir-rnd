@@ -27,6 +27,14 @@ class PaymentMethodSeeder extends Seeder
                 'is_wallet' => false,
                 'icon' => 'assets/images/payment-methods/cash.png',
             ],
+            [
+                'name' => 'QRIS',
+                'is_cash' => false,
+                'is_debit' => false,
+                'is_credit' => false,
+                'is_wallet' => true,
+                'icon' => 'assets/images/payment-methods/qris.png',
+            ],
         ];
     }
 }
