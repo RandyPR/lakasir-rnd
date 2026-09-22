@@ -128,7 +128,11 @@ class Cashier extends Page implements HasForms, HasTable
             'member_id' => null,
         ]);
 
+        $this->cartDetail['table_id'] = null;
+        $this->cartDetail['table_label'] = null;
+
         $this->fillPayemntMethod();
+        $this->fillTableLabel();
     }
 
     protected function getForms(): array
@@ -155,30 +159,33 @@ class Cashier extends Page implements HasForms, HasTable
                     })
                     ->hiddenLabel()
                     ->extraAttributes([
-                        'id' => 'memberSelect',
-                        'class' => 'hidden',
+                        'data-field' => 'memberSelect',
                     ])
                     ->searchable(),
                 TextInput::make('customer_name')
                     ->label(__('Customer Name'))
                     ->hiddenLabel()
                     ->placeholder(__('Enter customer name'))
-                    ->live(onBlur: true)
                     ->extraAttributes([
-                        'id' => 'customerNameInput',
-                        'class' => 'hidden',
+                        'data-field' => 'customerNameInput',
                     ]),
                 RichEditor::make('note')
                     ->hiddenLabel()
+                    ->toolbarButtons([
+                        'bold',
+                        'italic',
+                        'bulletList',
+                        'orderedList',
+                        'undo',
+                        'redo',
+                    ])
                     ->extraAttributes([
-                        'id' => 'noteInput',
-                        'class' => 'hidden',
+                        'data-field' => 'noteInput',
                     ]),
                 TextInput::make('voucher')
                     ->hiddenLabel()
                     ->extraAttributes([
-                        'id' => 'voucherInput',
-                        'class' => 'hidden',
+                        'data-field' => 'voucherInput',
                     ])
                     ->visible(hasFeatureAndPermission(Voucher::class)),
                 TextInput::make('discount_price')
@@ -187,8 +194,7 @@ class Cashier extends Page implements HasForms, HasTable
                     ->numeric()
                     ->prefix(Setting::get('currency', 'IDR'))
                     ->extraAttributes([
-                        'id' => 'discountInput',
-                        'class' => 'hidden',
+                        'data-field' => 'discountInput',
                     ])
                     ->hiddenLabel()
                     ->label(__('Manual Discount')),
@@ -243,6 +249,48 @@ class Cashier extends Page implements HasForms, HasTable
             return $key == $this->cartDetail['member_id'];
         })->first();
         $this->cartDetail['member_label'] = $member;
+    }
+
+    public function selectTable(?int $tableId = null): void
+    {
+        if ($tableId) {
+            $table = Table::find($tableId);
+            if ($table) {
+                $this->cartDetail['table_id'] = $table->id;
+                $this->cartDetail['table_label'] = $table->number;
+            }
+        } else {
+            $this->cartDetail['table_id'] = null;
+            $this->cartDetail['table_label'] = null;
+        }
+
+        $this->dispatch('close-modal', id: 'modal-selected-table');
+    }
+
+    public function saveCustomTable(?string $customNumber = null): void
+    {
+        $number = trim((string) $customNumber);
+        if (! empty($number)) {
+            $table = Table::firstOrCreate(['number' => $number]);
+            $this->tableOption = Table::select('id', 'number')->get();
+            $this->cartDetail['table_id'] = $table->id;
+            $this->cartDetail['table_label'] = $table->number;
+        } else {
+            $this->cartDetail['table_id'] = null;
+            $this->cartDetail['table_label'] = null;
+        }
+
+        $this->dispatch('close-modal', id: 'modal-selected-table');
+    }
+
+    private function fillTableLabel(): void
+    {
+        if (! empty($this->cartDetail['table_id'])) {
+            $table = Table::find($this->cartDetail['table_id']);
+            $this->cartDetail['table_label'] = $table?->number;
+        } else {
+            $this->cartDetail['table_label'] = null;
+        }
     }
 
     public function proceedThePayment(SellingService $sellingService): void

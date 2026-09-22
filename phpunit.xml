@@ -20,6 +20,7 @@
     </testsuite>
   </testsuites>
   <php>
+    <env name="APP_KEY" value="base64:++fs3WFAyrbfkhQ76vdQeUuYDpwqxf2WY28TMEtMvVg="/>
     <env name="APP_ENV" value="testing"/>
     <env name="BCRYPT_ROUNDS" value="4"/>
     <server name="CACHE_DRIVER" value="array"/>

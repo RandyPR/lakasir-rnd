@@ -5,7 +5,7 @@
 <div class="space-y-3">
   @feature(Member::class)
     <div class="flex justify-between hover:underline cursor-pointer"
-      x-on:mousedown="$dispatch('open-modal', {
+      x-on:click="$dispatch('open-modal', {
         id: 'edit-detail',
         inputId: 'memberSelect',
         index: 0,
@@ -16,7 +16,7 @@
     </div>
   @endfeature
   <div class="flex justify-between hover:underline cursor-pointer"
-      x-on:mousedown="$dispatch('open-modal', {
+      x-on:click="$dispatch('open-modal', {
         id: 'edit-detail',
         inputId: 'customerNameInput',
         index: 1,
@@ -26,7 +26,7 @@
     <p class="font-bold">{{ !empty($cartDetail['customer_name']) ? $cartDetail['customer_name'] : '-' }}</p>
   </div>
   <div class="flex justify-between hover:underline cursor-pointer"
-      x-on:mousedown="$dispatch('open-modal', {
+      x-on:click="$dispatch('open-modal', {
         id: 'edit-detail',
         inputId: 'noteInput',
         index: 2,
@@ -37,11 +37,11 @@
   </div>
   @if($about && $about->business_type == 'fnb')
     <div class="flex justify-between hover:underline cursor-pointer"
-        x-on:mousedown="$dispatch('open-modal', {
+        x-on:click="$dispatch('open-modal', {
           id: 'modal-selected-table'
         })">
       <p>{{ __('Table') }}</p>
-      <div>{!! $cartDetail['table_id'] ?? '-' !!}</div>
+      <p class="font-bold">{{ !empty($cartDetail['table_label']) ? $cartDetail['table_label'] : '-' }}</p>
     </div>
   @endif
   @feature(Voucher::class)
@@ -71,7 +71,7 @@
   @endfeature
   @feature(Discount::class)
   <div class="flex justify-between hover:underline cursor-pointer"
-      x-on:mousedown="$dispatch('open-modal', {
+      x-on:click="$dispatch('open-modal', {
         id: 'edit-detail',
         inputId: 'discountInput',
         index: 4,

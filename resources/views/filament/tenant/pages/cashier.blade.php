@@ -146,16 +146,26 @@
     </div>
   </div>
   {{-- modal --}}
-  <x-filament::modal id="edit-detail" width="2xl">
-    <form wire:submit.prevent="storeCart">
-      <x-slot name="heading">
-        <p id="titleEditDetail">{{ __('Edit detail') }}</p>
-      </x-slot>
-      {{ $this->storeCartForm }}
-      <x-filament::button type="submit" class="mt-10">
-        {{ __('Save') }}
-      </x-filament::button>
-    </form>
+  <x-filament::modal id="edit-detail" width="md">
+    <x-slot name="heading">
+      <span x-data="{ title: '{{ __('Edit detail') }}' }"
+            x-on:open-modal.window="if ($event.detail?.id === 'edit-detail') { title = $event.detail?.title || '{{ __('Edit detail') }}'; }"
+            x-text="title">
+        {{ __('Edit detail') }}
+      </span>
+    </x-slot>
+    <div x-data="{ activeField: '' }"
+         x-on:open-modal.window="if ($event.detail?.id === 'edit-detail') { activeField = $event.detail?.inputId || ''; }"
+         :class="activeField ? 'show-field-' + activeField : ''">
+      <form wire:submit.prevent="storeCart">
+        {{ $this->storeCartForm }}
+        <div class="mt-4 flex justify-end">
+          <x-filament::button type="submit">
+            {{ __('Save') }}
+          </x-filament::button>
+        </div>
+      </form>
+    </div>
   </x-filament::modal>
   <x-filament::modal id="proceed-the-payment" width="5xl">
     <form wire:submit.prevent="proceedThePayment">
@@ -276,30 +286,60 @@
       </div>
     </x-slot>
   </x-filament::modal>
-  <x-filament::modal id="modal-selected-table" width="xl" :close-by-clicking-away="false" :close-by-escaping="false">
-    <div class="grid grid-cols-4 gap-4">
-      @foreach ($tableOption as $table)
-        <div x-on:click="$wire.cartDetail['table_id'] = {{ $table->id }};"
-          class="flex cursor-pointer justify-center rounded-md border border-lakasir-primary px-4 py-2 text-sm hover:scale-105 dark:text-white"
-          :class="$wire.cartDetail['table_id'] == {{ $table->id }} ? 'bg-lakasir-primary text-white' : 'dark:bg-gray-900 '">
-          {{ $table->number }}
-        </div>
-      @endforeach
-    </div>
-    <x-slot name="footer">
-      <x-slot name="heading">
-        <p id="titleEditDetail">{{ __('Choose the table') }}</p>
-      </x-slot>
-      <div class="grid grid-cols-2 gap-x-2">
-        <x-filament::button id="saveSelectedTable"
-          x-on:click="$dispatch('close-modal', {id: 'modal-selected-table'}); $wire.storeCart()">
-          {{ __('Save') }}
-        </x-filament::button>
-        <x-filament::button color="gray" x-on:click="$dispatch('close-modal', {id: 'modal-selected-table'})">
-          {{ __('Close') }}
-        </x-filament::button>
+  <x-filament::modal id="modal-selected-table" width="md">
+    <x-slot name="heading">
+      <div class="flex items-center gap-2">
+        <x-heroicon-o-table-cells class="h-5 w-5 text-lakasir-primary" />
+        <span>{{ __('Choose or Enter Table') }}</span>
       </div>
     </x-slot>
+
+    <div class="space-y-4">
+      {{-- Quick table selection grid --}}
+      <div>
+        <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 block">
+          {{ __('Quick Table Select') }}
+        </label>
+        <div class="grid grid-cols-3 gap-2.5 max-h-56 overflow-y-auto pr-1">
+          {{-- Option: No table / Take away --}}
+          <button type="button"
+            wire:click="selectTable(null)"
+            class="flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all hover:scale-[1.02] {{ empty($cartDetail['table_id']) ? 'border-lakasir-primary bg-lakasir-primary text-white shadow-sm' : 'border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700' }}">
+            <x-heroicon-o-shopping-bag class="h-4 w-4" />
+            <span>{{ __('Take Away') }}</span>
+          </button>
+
+          {{-- Existing registered tables --}}
+          @if($tableOption)
+            @foreach ($tableOption as $table)
+              <button type="button"
+                wire:click="selectTable({{ $table->id }})"
+                class="flex items-center justify-center rounded-lg border px-3 py-2.5 text-sm font-medium transition-all hover:scale-[1.02] {{ ($cartDetail['table_id'] ?? null) == $table->id ? 'border-lakasir-primary bg-lakasir-primary text-white shadow-sm font-bold' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800' }}">
+                {{ $table->number }}
+              </button>
+            @endforeach
+          @endif
+        </div>
+      </div>
+
+      {{-- Custom table input section --}}
+      <div class="pt-3 border-t border-gray-200 dark:border-gray-700" x-data="{ customNumber: '' }">
+        <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
+          {{ __('Or Enter Custom Table Name') }}
+        </label>
+        <div class="flex gap-2">
+          <input type="text"
+            x-model="customNumber"
+            x-on:keydown.enter.prevent="if (customNumber.trim()) { $wire.saveCustomTable(customNumber.trim()); customNumber = ''; }"
+            placeholder="{{ __('e.g. VIP-01, Table 12, Bar 2...') }}"
+            class="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:border-lakasir-primary focus:ring-1 focus:ring-lakasir-primary outline-none" />
+          <x-filament::button type="button"
+            x-on:click="if (customNumber.trim()) { $wire.saveCustomTable(customNumber.trim()); customNumber = ''; }">
+            {{ __('Save') }}
+          </x-filament::button>
+        </div>
+      </div>
+    </div>
   </x-filament::modal>
 
   <x-filament::modal id="qr-scanner-modal" width="lg" :close-by-clicking-away="false"
@@ -446,6 +486,25 @@
       text-decoration: underline !important;
       box-shadow: none !important;
       padding: 0 !important;
+    }
+
+    /* Selective field visibility in Edit Detail modal */
+    /* When a show-field-* class is present, hide all field wrappers */
+    div[class*="show-field-"] .fi-fo-field-wrp {
+      display: none !important;
+    }
+    /* Then show only the field matching activeField */
+    div.show-field-memberSelect .fi-fo-field-wrp[data-field="memberSelect"],
+    div.show-field-memberSelect .fi-fo-field-wrp:has([data-field="memberSelect"]),
+    div.show-field-customerNameInput .fi-fo-field-wrp[data-field="customerNameInput"],
+    div.show-field-customerNameInput .fi-fo-field-wrp:has([data-field="customerNameInput"]),
+    div.show-field-noteInput .fi-fo-field-wrp[data-field="noteInput"],
+    div.show-field-noteInput .fi-fo-field-wrp:has([data-field="noteInput"]),
+    div.show-field-voucherInput .fi-fo-field-wrp[data-field="voucherInput"],
+    div.show-field-voucherInput .fi-fo-field-wrp:has([data-field="voucherInput"]),
+    div.show-field-discountInput .fi-fo-field-wrp[data-field="discountInput"],
+    div.show-field-discountInput .fi-fo-field-wrp:has([data-field="discountInput"]) {
+      display: block !important;
     }
   </style>
 
@@ -745,38 +804,21 @@
 
       if (data.inputId != undefined) {
         let inputId = data.inputId;
-        let title = data.title;
-        let titleModal = document.getElementById("titleEditDetail");
-        if (titleModal && title) {
-          titleModal.innerHTML = title;
-        }
         index = data.index;
 
         const setupInput = () => {
-          input = document.getElementById(inputId);
+          input = document.querySelector('[data-field="' + inputId + '"]');
           if (input) {
-            let container = input.closest('form')?.querySelector('.grid') || input.closest('.grid') || input.parentNode?.parentNode?.parentNode?.parentNode?.parentNode;
-            if (container && container.children) {
-              [...container.children].forEach((child, i) => {
-                if (!child.contains(input) && (index === undefined || i !== index)) {
-                  child.classList.add('hidden');
-                } else {
-                  child.classList.remove('hidden');
-                }
-              });
+            const focusEl = input.querySelector('input, textarea, select, [contenteditable]') || input;
+            if (focusEl && typeof focusEl.focus === 'function') {
+              focusEl.focus();
             }
-            input.classList.remove('hidden');
-            setTimeout(() => {
-              const focusEl = input.querySelector('input, textarea, select') || input;
-              if (focusEl && typeof focusEl.focus === 'function') {
-                focusEl.focus();
-              }
-            }, 50);
           }
         };
 
         setupInput();
         setTimeout(setupInput, 100);
+        setTimeout(setupInput, 300);
       }
 
       let totalEl = document.querySelector('[x-ref="total"]');
@@ -788,20 +830,7 @@
     }
 
     function handleCloseModal(event) {
-      if (input != undefined) {
-        let titleModal = document.getElementById("titleEditDetail");
-        if (titleModal) {
-          titleModal.innerHTML = '@lang('Edit detail')';
-        }
-        let container = input.closest('form')?.querySelector('.grid') || input.closest('.grid') || input.parentNode?.parentNode?.parentNode?.parentNode?.parentNode;
-        if (container && container.children) {
-          [...container.children].forEach((child) => {
-            child.classList.remove('hidden');
-          });
-        }
-        input.classList.add('hidden');
-        input = undefined;
-      }
+      input = undefined;
       modalOpened = false;
     }
 
