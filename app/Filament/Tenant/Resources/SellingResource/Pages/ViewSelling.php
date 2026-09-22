@@ -22,6 +22,7 @@ class ViewSelling extends ViewRecord
     {
         parent::mount($record);
 
+        $this->record->loadMissing('sellingDetails.product', 'paymentMethod', 'user', 'member', 'table');
         $this->about = About::first();
     }
 
@@ -33,23 +34,23 @@ class ViewSelling extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            Action::make(__('Print invoice'))
+            Action::make('printInvoice')
+                ->label(__('Print invoice'))
                 ->icon('heroicon-s-printer')
-                ->livewireClickHandlerEnabled(false)
+                ->color(Color::Teal)
                 ->extraAttributes([
                     'id' => 'printInvoice',
                     'type' => 'button',
-                    'x-on:click.prevent.stop' => 'window.handlePrintInvoice && window.handlePrintInvoice()',
+                    'onclick' => 'window.handlePrintInvoice && window.handlePrintInvoice()',
                 ])
-                ->color(Color::Teal)
                 ->visible(can('can print selling') && feature(PrintSellingA5::class)),
-            Action::make(__('Print receipt'))
+            Action::make('printReceipt')
+                ->label(__('Print receipt'))
                 ->icon('heroicon-s-printer')
-                ->livewireClickHandlerEnabled(false)
                 ->extraAttributes([
                     'id' => 'printButton',
                     'type' => 'button',
-                    'x-on:click.prevent.stop' => 'window.handlePrintReceipt && window.handlePrintReceipt()',
+                    'onclick' => 'window.handlePrintReceipt && window.handlePrintReceipt()',
                 ])
                 ->visible(can('can print selling')),
         ];

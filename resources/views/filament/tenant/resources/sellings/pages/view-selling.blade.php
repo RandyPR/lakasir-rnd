@@ -111,8 +111,10 @@
     </div>
   </x-filament::section>
 </x-filament-panels::page>
-@script()
 <script>
+  window._lakasirViewSelling = @js($record->loadMissing('sellingDetails.product', 'paymentMethod', 'user', 'member', 'table'));
+  window._lakasirViewAbout = @js($about ?? \App\Models\Tenants\About::first());
+
   window.handlePrintInvoice = function() {
     if (window._lakasirHandlingInvoice) return;
     window._lakasirHandlingInvoice = true;
@@ -149,23 +151,27 @@
       printBtn.style.opacity = '0.6';
     }
 
-    let selling = @js($record);
-    let about = @js($about);
+    let selling = window._lakasirViewSelling || @js($record);
+    let about = window._lakasirViewAbout || @js($about);
     const printerData = getPrinter();
     const showCurrency = Boolean(printerData?.show_currency ?? @js(\App\Models\Tenants\Setting::get('receipt_show_currency', false)));
 
     try {
       if (!printerData) {
-        new FilamentNotification()
-          .title('@lang('You should choose the printer first in printer setting')')
-          .danger()
-          .actions([
-            new FilamentNotificationAction('Setting')
-              .icon('heroicon-o-cog-6-tooth')
-              .button()
-              .url('/member/printer'),
-          ])
-          .send();
+        if (typeof FilamentNotification !== 'undefined') {
+          new FilamentNotification()
+            .title('@lang('You should choose the printer first in printer setting')')
+            .danger()
+            .actions([
+              new FilamentNotificationAction('Setting')
+                .icon('heroicon-o-cog-6-tooth')
+                .button()
+                .url('/member/printer'),
+            ])
+            .send();
+        } else {
+          alert('Silakan atur printer terlebih dahulu di menu Pengaturan Printer.');
+        }
         return;
       }
 
@@ -201,7 +207,7 @@
       printerAction.align('left')
         .text('-------------------------------');
 
-      printerAction.table(['@lang('Cashier')', selling?.user?.name || '']);
+      printerAction.table(['@lang('Cashier')', selling?.user?.name || selling?.user?.cashier_name || '']);
       if (selling?.table != undefined && selling?.table != null) {
         printerAction.table(['@lang('Table')', String(selling.table.number || '')]);
       }
@@ -226,7 +232,7 @@
           let productName = sellingDetail.product?.name || '';
           printerAction.table([productName, formatReceiptMoney(unitPrice, showCurrency) + ' x ' + qty.toString()]);
           if (sellingDetail.discount_price > 0) {
-            price = price - sellingDetail.discount_price;
+            price = price - Number(sellingDetail.discount_price);
             printerAction
               .align('right')
               .text(`(${formatReceiptMoney(sellingDetail.discount_price, showCurrency)})`);
@@ -260,7 +266,7 @@
         .cut()
         .print();
     } catch (error) {
-      console.error(error);
+      console.error('Print receipt error:', error);
       if (typeof FilamentNotification !== 'undefined') {
         new FilamentNotification()
           .title('@lang('Gagal mencetak'): ' + (error.message || error))
@@ -277,6 +283,21 @@
       }, 3000);
     }
   };
+
+  // Ensure button binding is immediate
+  const attachPrintBtn = () => {
+    const btn = document.getElementById('printButton');
+    if (btn) {
+      btn.onclick = window.handlePrintReceipt;
+    }
+    const invBtn = document.getElementById('printInvoice');
+    if (invBtn) {
+      invBtn.onclick = window.handlePrintInvoice;
+    }
+  };
+  attachPrintBtn();
+  document.addEventListener('DOMContentLoaded', attachPrintBtn);
+  document.addEventListener('livewire:navigated', attachPrintBtn);
+  document.addEventListener('livewire:initialized', attachPrintBtn);
 </script>
-@endscript
 
