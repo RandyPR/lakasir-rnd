@@ -447,144 +447,93 @@ class Printer {
 
       const bleServiceUuids = [
         '000018f0-0000-1000-8000-00805f9b34fb',
-        'e7810a71-73ae-499d-8c15-faa9aef0c3f1',
-        '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+        '0000ffe0-0000-1000-8000-00805f9b34fb',
+        '0000fff0-0000-1000-8000-00805f9b34fb',
         '0000ff00-0000-1000-8000-00805f9b34fb',
         '0000ae30-0000-1000-8000-00805f9b34fb',
         '0000fee7-0000-1000-8000-00805f9b34fb',
+        '0000fee0-0000-1000-8000-00805f9b34fb',
+        'e7810a71-73ae-499d-8c15-faa9aef0c3f1',
+        '49535343-fe7d-4ae5-8fa9-9fafd205e455',
         '00001101-0000-1000-8000-00805f9b34fb',
       ];
 
       let device = window.lakasirBluetoothDevice;
-      let needsGattConnect = false;
+      let server = window.lakasirBluetoothServer;
 
-      // Step 1: Try to get previously paired device if we lost reference (page navigation)
-      if (!device || !device.gatt?.connected) {
-        needsGattConnect = true;
-        device = null;
-
-        if (navigator.bluetooth.getDevices) {
+      // 1. If not connected, find device or reuse cached
+      if (!device || !device.gatt?.connected || !server) {
+        server = null;
+        if (!device && navigator.bluetooth.getDevices) {
           try {
             const devices = await navigator.bluetooth.getDevices();
-            device = devices.find(d => d.id === this.printerId) || devices[0];
-
-            if (device) {
-              console.log('Found previously paired device:', device.name, device.id);
-
-              // On Chrome Android, devices from getDevices() need watchAdvertisements()
-              // before gatt.connect() will work after page navigation
-              if (device.watchAdvertisements) {
-                try {
-                  const abortController = new AbortController();
-                  const adReceived = new Promise((resolve) => {
-                    device.addEventListener('advertisementreceived', () => {
-                      console.log('Advertisement received from', device.name);
-                      resolve(true);
-                    }, { once: true });
-                  });
-
-                  await device.watchAdvertisements({ signal: abortController.signal });
-
-                  // Wait up to 5 seconds for the printer to be detected nearby
-                  const found = await Promise.race([
-                    adReceived,
-                    new Promise(resolve => setTimeout(() => resolve(false), 5000)),
-                  ]);
-
-                  abortController.abort();
-
-                  if (!found) {
-                    console.warn('Printer not detected nearby via watchAdvertisements, will try direct connect anyway');
-                  }
-                } catch (watchErr) {
-                  // watchAdvertisements might not be supported or may fail - continue anyway
-                  console.warn('watchAdvertisements skipped:', watchErr.message);
-                }
-              }
+            if (devices && devices.length > 0) {
+              device = devices.find(d => d.id === this.printerId) || devices[0];
             }
-          } catch (getDevErr) {
-            console.warn('getDevices() failed:', getDevErr.message);
+          } catch (e) {
+            console.warn('getDevices() warning:', e);
           }
         }
-      }
 
-      // Step 2: If no device found, prompt user to select one
-      if (!device) {
-        console.log('No cached device, prompting user to select...');
-        device = await navigator.bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: bleServiceUuids,
-        });
-        needsGattConnect = true;
-      }
-
-      if (!device) {
-        this.showNoPrinterNotification();
-        return;
-      }
-
-      window.lakasirBluetoothDevice = device;
-
-      // Listen for disconnection to clean up cached server
-      if (!device._lakasirDisconnectListenerAdded) {
-        device.addEventListener('gattserverdisconnected', () => {
-          console.log('Bluetooth printer disconnected');
-          window.lakasirBluetoothServer = null;
-        });
-        device._lakasirDisconnectListenerAdded = true;
-      }
-
-      // Step 3: Connect to GATT with retry logic
-      let server = window.lakasirBluetoothServer;
-      if (needsGattConnect || !server || !device.gatt?.connected) {
-        server = null;
-        const MAX_RETRIES = 3;
-        let lastError = null;
-
-        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        // 2. Try GATT connection with the found/cached device
+        if (device) {
           try {
-            console.log(`GATT connect attempt ${attempt}/${MAX_RETRIES} to ${device.name}...`);
-            server = await device.gatt.connect();
-            console.log('GATT connected successfully on attempt', attempt);
-            break;
-          } catch (gattErr) {
-            lastError = gattErr;
-            console.warn(`GATT connect attempt ${attempt} failed:`, gattErr.message);
-            if (attempt < MAX_RETRIES) {
-              await new Promise(r => setTimeout(r, 1000 * attempt));
+            if (device.gatt?.connected) {
+              try { device.gatt.disconnect(); } catch (_) {}
+              await new Promise(r => setTimeout(r, 100));
             }
+            console.log('Connecting to Bluetooth device:', device.name || device.id);
+            server = await device.gatt.connect();
+          } catch (connectErr) {
+            console.warn('Direct connect to cached device failed:', connectErr.message);
+            server = null;
+            device = null;
           }
         }
 
-        // If GATT failed with cached device, try fresh requestDevice as last resort
-        if (!server && device !== window.lakasirBluetoothDevice) {
-          console.log('GATT failed with cached device, prompting user to re-select...');
+        // 3. If still no server/device, prompt user to select the printer
+        if (!server || !device) {
+          console.log('Requesting Bluetooth device via browser picker...');
           try {
             device = await navigator.bluetooth.requestDevice({
               acceptAllDevices: true,
               optionalServices: bleServiceUuids,
             });
             if (device) {
-              window.lakasirBluetoothDevice = device;
+              if (device.gatt?.connected) {
+                try { device.gatt.disconnect(); } catch (_) {}
+                await new Promise(r => setTimeout(r, 100));
+              }
               server = await device.gatt.connect();
             }
-          } catch (retryErr) {
-            console.error('Re-select also failed:', retryErr.message);
+          } catch (reqErr) {
+            console.error('requestDevice error:', reqErr);
+            if (reqErr.name === 'NotFoundError') {
+              // User cancelled picker
+              return;
+            }
+            throw reqErr;
           }
         }
 
-        if (!server) {
-          throw new Error(
-            'Gagal connect ke Bluetooth printer. ' +
-            'Pastikan printer menyala dan dekat dengan HP. ' +
-            'Coba buka Printer Setting dan select ulang printer. ' +
-            (lastError?.message || '')
-          );
+        if (!device || !server) {
+          this.showNoPrinterNotification();
+          return;
         }
+
+        window.lakasirBluetoothDevice = device;
         window.lakasirBluetoothServer = server;
+
+        if (!device._lakasirDisconnectListenerAdded) {
+          device.addEventListener('gattserverdisconnected', () => {
+            console.log('Bluetooth printer disconnected');
+            window.lakasirBluetoothServer = null;
+          });
+          device._lakasirDisconnectListenerAdded = true;
+        }
       }
 
-      // Step 4: Find writable characteristic
+      // 4. Find writable characteristic across all services
       let writeChar = null;
       const services = await server.getPrimaryServices();
 
@@ -607,8 +556,7 @@ class Printer {
         throw new Error('Tidak ditemukan characteristic tulis BLE pada printer ini. Pastikan printer menyala dan coba ulang.');
       }
 
-      // Step 5: Send data in small chunks for RPP02N BLE compatibility
-      // BLE default MTU is 23 bytes (20 payload), use small chunks for reliability
+      // 5. Send data in small chunks for Bluetooth BLE MTU
       const CHUNK_SIZE = 20;
       const CHUNK_DELAY = 50;
       for (let offset = 0; offset < data.length; offset += CHUNK_SIZE) {
@@ -627,8 +575,8 @@ class Printer {
       this.clearCommands();
     } catch (e) {
       console.error('Bluetooth print error:', e);
-      // Reset cached server on failure so next attempt reconnects fresh
       window.lakasirBluetoothServer = null;
+      window.lakasirBluetoothDevice = null;
       if (typeof FilamentNotification !== 'undefined') {
         new FilamentNotification()
           .title('Gagal mencetak ke Bluetooth printer: ' + (e.message || e))

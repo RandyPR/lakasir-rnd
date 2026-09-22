@@ -197,11 +197,14 @@
 
         const bleServiceUuids = [
           '000018f0-0000-1000-8000-00805f9b34fb',
-          'e7810a71-73ae-499d-8c15-faa9aef0c3f1',
-          '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+          '0000ffe0-0000-1000-8000-00805f9b34fb',
+          '0000fff0-0000-1000-8000-00805f9b34fb',
           '0000ff00-0000-1000-8000-00805f9b34fb',
           '0000ae30-0000-1000-8000-00805f9b34fb',
           '0000fee7-0000-1000-8000-00805f9b34fb',
+          '0000fee0-0000-1000-8000-00805f9b34fb',
+          'e7810a71-73ae-499d-8c15-faa9aef0c3f1',
+          '49535343-fe7d-4ae5-8fa9-9fafd205e455',
           '00001101-0000-1000-8000-00805f9b34fb',
         ];
 
@@ -221,6 +224,10 @@
           for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
               console.log(`GATT connect attempt ${attempt}/${MAX_RETRIES} to ${device.name}...`);
+              if (device.gatt?.connected) {
+                try { device.gatt.disconnect(); } catch (_) {}
+                await new Promise(r => setTimeout(r, 100));
+              }
               server = await device.gatt.connect();
               console.log('GATT connected successfully');
               break;
@@ -228,7 +235,7 @@
               lastError = gattErr;
               console.warn(`GATT connect attempt ${attempt} failed:`, gattErr.message);
               if (attempt < MAX_RETRIES) {
-                await new Promise(r => setTimeout(r, 1000 * attempt));
+                await new Promise(r => setTimeout(r, 500 * attempt));
               }
             }
           }
