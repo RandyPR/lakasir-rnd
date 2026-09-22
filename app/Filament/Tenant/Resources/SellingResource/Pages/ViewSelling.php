@@ -35,6 +35,7 @@ class ViewSelling extends ViewRecord
         return [
             Action::make(__('Print invoice'))
                 ->icon('heroicon-s-printer')
+                ->livewireClickHandlerEnabled(false)
                 ->extraAttributes([
                     'id' => 'printInvoice',
                     'type' => 'button',
@@ -44,6 +45,7 @@ class ViewSelling extends ViewRecord
                 ->visible(can('can print selling') && feature(PrintSellingA5::class)),
             Action::make(__('Print receipt'))
                 ->icon('heroicon-s-printer')
+                ->livewireClickHandlerEnabled(false)
                 ->extraAttributes([
                     'id' => 'printButton',
                     'type' => 'button',

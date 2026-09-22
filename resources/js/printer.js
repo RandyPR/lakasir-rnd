@@ -279,9 +279,10 @@ class Printer {
         await this.printToUSB(data);
       }
     } finally {
+      this.clearCommands();
       setTimeout(() => {
         window._lakasirIsPrintingNow = false;
-      }, 1500);
+      }, 2500);
     }
   }
 

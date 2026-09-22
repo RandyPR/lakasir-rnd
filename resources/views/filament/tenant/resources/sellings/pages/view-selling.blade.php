@@ -113,19 +113,16 @@
 </x-filament-panels::page>
 @script()
 <script>
-  let isPrintingInvoice = false;
-  let isPrintingReceipt = false;
-
   window.handlePrintInvoice = function() {
-    if (isPrintingInvoice) return;
-    isPrintingInvoice = true;
+    if (window._lakasirHandlingInvoice) return;
+    window._lakasirHandlingInvoice = true;
     try {
       const printContents = document.getElementById("printElement").innerHTML;
       document.body.innerHTML = printContents;
       window.print();
       window.location.reload();
     } finally {
-      setTimeout(() => { isPrintingInvoice = false; }, 2000);
+      setTimeout(() => { window._lakasirHandlingInvoice = false; }, 2000);
     }
   };
 
@@ -140,11 +137,17 @@
   }
 
   window.handlePrintReceipt = async function() {
-    if (isPrintingReceipt || window._lakasirIsPrintingNow) {
+    if (window._lakasirHandlingReceipt || window._lakasirIsPrintingNow) {
       console.warn('Receipt print already in progress, skipping duplicate invocation.');
       return;
     }
-    isPrintingReceipt = true;
+    window._lakasirHandlingReceipt = true;
+
+    const printBtn = document.getElementById('printButton');
+    if (printBtn) {
+      printBtn.style.pointerEvents = 'none';
+      printBtn.style.opacity = '0.6';
+    }
 
     let selling = @js($record);
     let about = @js($about);
@@ -264,19 +267,14 @@
       }
     } finally {
       setTimeout(() => {
-        isPrintingReceipt = false;
-      }, 2000);
+        window._lakasirHandlingReceipt = false;
+        if (printBtn) {
+          printBtn.style.pointerEvents = '';
+          printBtn.style.opacity = '';
+        }
+      }, 3000);
     }
   };
-
-  const printInvoiceEl = document.getElementById('printInvoice');
-  const printButtonEl = document.getElementById('printButton');
-  if (printInvoiceEl) {
-    printInvoiceEl.onclick = window.handlePrintInvoice;
-  }
-  if (printButtonEl) {
-    printButtonEl.onclick = window.handlePrintReceipt;
-  }
 </script>
 @endscript
 

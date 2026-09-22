@@ -851,6 +851,18 @@
     }
 
     async function handleCashierPrintReceipt(event) {
+      if (window._lakasirHandlingCashierReceipt || window._lakasirIsPrintingNow) {
+        console.warn('Cashier receipt print already in progress, skipping duplicate invocation.');
+        return;
+      }
+      window._lakasirHandlingCashierReceipt = true;
+
+      const printReceiptBtn = document.getElementById("printReceiptButton");
+      if (printReceiptBtn) {
+        printReceiptBtn.style.pointerEvents = 'none';
+        printReceiptBtn.style.opacity = '0.6';
+      }
+
       let about = @js($about);
       const printerData = getPrinter();
       const showCurrency = Boolean(printerData?.show_currency ?? @js(\App\Models\Tenants\Setting::get('receipt_show_currency', false)));
@@ -963,6 +975,7 @@
           await printerAction
             .cut()
             .print();
+        }
       } catch (error) {
         console.error(error);
         if (typeof FilamentNotification !== 'undefined') {
@@ -971,6 +984,14 @@
             .danger()
             .send();
         }
+      } finally {
+        setTimeout(() => {
+          window._lakasirHandlingCashierReceipt = false;
+          if (printReceiptBtn) {
+            printReceiptBtn.style.pointerEvents = '';
+            printReceiptBtn.style.opacity = '';
+          }
+        }, 3000);
       }
     }
 
