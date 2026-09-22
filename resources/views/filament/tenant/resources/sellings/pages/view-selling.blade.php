@@ -114,17 +114,21 @@
 @script()
 <script>
   console.log(@js($record));
-  document.getElementById('printInvoice').addEventListener('click', () => {
-    const printContents = document.getElementById("printElement").innerHTML;
-    const originalContents = document.body.innerHTML;
 
+  // Guard against duplicate listeners by using named functions and removing before re-adding
+  const printInvoiceEl = document.getElementById('printInvoice');
+  const printButtonEl = document.getElementById('printButton');
+
+  function handlePrintInvoice() {
+    const printContents = document.getElementById("printElement").innerHTML;
 
     document.body.innerHTML = printContents;
 
     window.print();
 
     window.location.reload();
-  });
+  }
+
   function formatReceiptMoney(number, showCurrency = false) {
     const num = Number(number) || 0;
     const formatted = new Intl.NumberFormat('id-ID', {
@@ -135,7 +139,7 @@
     return showCurrency ? ('Rp ' + formatted) : formatted;
   }
 
-  document.getElementById('printButton').addEventListener('click', async () => {
+  async function handlePrintReceipt() {
     let selling = @js($record);
     let about = @js($about);
     const printerData = getPrinter();
@@ -252,6 +256,17 @@
           .send();
       }
     }
-  });
+  }
+
+  // Remove any previously attached listeners before adding new ones
+  if (printInvoiceEl) {
+    printInvoiceEl.removeEventListener('click', handlePrintInvoice);
+    printInvoiceEl.addEventListener('click', handlePrintInvoice);
+  }
+  if (printButtonEl) {
+    printButtonEl.removeEventListener('click', handlePrintReceipt);
+    printButtonEl.addEventListener('click', handlePrintReceipt);
+  }
 </script>
 @endscript
+

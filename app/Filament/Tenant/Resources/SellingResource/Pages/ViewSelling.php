@@ -56,7 +56,7 @@ class ViewSelling extends ViewRecord
 
     public function getRecord(): Selling
     {
-        return $this->record->load('sellingDetails.product');
+        return $this->record->load('sellingDetails.product', 'paymentMethod', 'user', 'member', 'table');
     }
 
     public function getRelationManagers(): array

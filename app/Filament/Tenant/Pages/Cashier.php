@@ -324,6 +324,13 @@ class Cashier extends Page implements HasForms, HasTable
         } catch (\Throwable $e) {
         }
 
+        if (isset($this->cartDetail['payed_money'])) {
+            $this->cartDetail['payed_money'] = floatval(preg_replace('/[^\d.]/', '', (string) $this->cartDetail['payed_money']));
+        }
+        if (isset($this->cartDetail['money_changes'])) {
+            $this->cartDetail['money_changes'] = floatval(preg_replace('/[^\d.]/', '', (string) $this->cartDetail['money_changes']));
+        }
+
         if (! empty($this->cartDetail['customer_name'])) {
             $this->cartDetail['customer_name'] = trim((string) $this->cartDetail['customer_name']);
         } else {
@@ -365,6 +372,11 @@ class Cashier extends Page implements HasForms, HasTable
         if ($pMethod->is_wallet || $pMethod->is_debit || ! $pMethod->is_cash) {
             $request['payed_money'] = $this->total_price;
             $request['money_changes'] = 0;
+        } else {
+            if (! isset($request['payed_money']) || empty($request['payed_money'])) {
+                $request['payed_money'] = $this->total_price;
+            }
+            $request['money_changes'] = max(0, floatval($request['payed_money']) - floatval($this->total_price));
         }
 
         $validator = Validator::make($request, [
@@ -404,7 +416,7 @@ class Cashier extends Page implements HasForms, HasTable
 
         $this->dispatch('close-modal', id: 'proceed-the-payment');
         $this->dispatch('open-modal', id: 'success-modal');
-        $this->dispatch('selling-created', selling: $selling->load('sellingDetails.product', 'table'));
+        $this->dispatch('selling-created', selling: $selling->load('sellingDetails.product', 'paymentMethod', 'user', 'member', 'table'));
     }
 
     public function assignVoucher(string $code)

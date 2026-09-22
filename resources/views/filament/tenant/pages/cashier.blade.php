@@ -172,7 +172,9 @@
     function detail() {
       return {
         isTouchScreen: Boolean(typeof window !== 'undefined' && (('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0))),
+        payedMoney: 0,
         displayValue: '',
+        selectedMethodId: null,
 
         get paymentMethods() {
           return (this.$wire && this.$wire.paymentMethods) ? this.$wire.paymentMethods : [];
@@ -188,7 +190,7 @@
 
         get selectedPaymentMethod() {
           const pms = this.paymentMethods;
-          const currentId = this.cartDetail ? this.cartDetail['payment_method_id'] : null;
+          const currentId = this.selectedMethodId || (this.cartDetail ? this.cartDetail['payment_method_id'] : null);
           return pms.find(pm => pm.id == currentId) || pms[0] || null;
         },
 
@@ -204,23 +206,44 @@
           return pm.name.toLowerCase().includes('qris') || Boolean(pm.is_wallet);
         },
 
+        get moneyChanges() {
+          if (this.isQris) return 0;
+          const payed = Number(this.payedMoney) || 0;
+          const total = Number(this.subtotal) || 0;
+          return Math.max(0, payed - total);
+        },
+
         get suggestions() {
           const total = Number(this.subtotal) || 0;
-          if (total <= 0) return [];
+          if (total <= 0) return [10000, 20000, 50000];
 
-          const denoms = [2000, 5000, 10000, 20000, 50000, 100000];
-          let list = [];
-          for (let d of denoms) {
-            const val = Math.ceil(total / d) * d;
-            if (val > total && !list.includes(val)) {
-              list.push(val);
+          const list = [];
+          const add = (v) => {
+            const num = Math.round(Number(v));
+            if (num > total && !list.includes(num)) {
+              list.push(num);
             }
+          };
+
+          // Step rounding based on standard payment increments
+          const steps = [1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000];
+          for (let step of steps) {
+            const next = Math.ceil(total / step) * step;
+            add(next);
           }
-          [50000, 100000].forEach(denom => {
-            if (denom > total && !list.includes(denom)) {
-              list.push(denom);
-            }
-          });
+
+          // Standard Indonesian banknotes
+          const standardBanknotes = [10000, 20000, 50000, 100000, 200000, 500000, 1000000];
+          for (let note of standardBanknotes) {
+            add(note);
+          }
+
+          // Ensure at least 3 suggestions exist
+          if (list.length < 3) {
+            const highest = list.length > 0 ? Math.max(...list) : total;
+            add(highest + 50000);
+            add(highest + 100000);
+          }
 
           list.sort((a, b) => a - b);
           return list.slice(0, 3);
@@ -231,16 +254,40 @@
             return window.moneyFormat(val);
           }
           const num = Number(val) || 0;
+          return (window.lakasirCurrency ? window.lakasirCurrency + ' ' : 'IDR ') + new Intl.NumberFormat('id-ID').format(num);
+        },
+
+        formatShortcut(val) {
+          const num = Number(val) || 0;
+          return new Intl.NumberFormat('id-ID').format(num);
+        },
+
+        formatDisplayMoney(val) {
+          const num = Number(val) || 0;
           return new Intl.NumberFormat('id-ID').format(num);
         },
 
         init() {
+          this.selectedMethodId = this.cartDetail ? this.cartDetail['payment_method_id'] : null;
           if (this.isQris) {
             this.setExactPayment();
           }
+          window.addEventListener('open-modal', (e) => {
+            if (e.detail?.id === 'proceed-the-payment') {
+              this.payedMoney = 0;
+              this.displayValue = '';
+              if (this.$refs.payedMoney) {
+                this.$refs.payedMoney.value = '';
+              }
+              if (this.isQris) {
+                this.setExactPayment();
+              }
+            }
+          });
         },
 
         selectPaymentMethod(pm) {
+          this.selectedMethodId = pm.id;
           if (this.$wire) {
             this.$wire.set('cartDetail.payment_method_id', pm.id);
           }
@@ -251,25 +298,29 @@
 
         setExactPayment() {
           const total = Number(this.subtotal) || 0;
+          this.payedMoney = total;
           this.displayValue = total > 0 ? total.toString() : '';
           if (this.$refs.payedMoney) {
-            this.$refs.payedMoney.value = this.formatMoney(total);
-          }
-          if (this.$wire) {
-            this.$wire.set('cartDetail.payed_money', total);
-            this.$wire.set('cartDetail.money_changes', 0);
-          }
-          if (this.$refs.moneyChanges) {
-            this.$refs.moneyChanges.textContent = this.formatMoney(0);
+            this.$refs.payedMoney.value = total > 0 ? this.formatDisplayMoney(total) : '';
           }
         },
 
         shortcut(number) {
-          this.displayValue = number.toString();
+          const num = Number(number) || 0;
+          this.payedMoney = num;
+          this.displayValue = num.toString();
           if (this.$refs.payedMoney) {
-            this.$refs.payedMoney.value = this.formatMoney(number);
+            this.$refs.payedMoney.value = this.formatDisplayMoney(num);
           }
-          this.changes();
+        },
+
+        onInput(event) {
+          let raw = event.target.value || '';
+          let clean = raw.replace(/\D/g, '');
+          let num = parseInt(clean, 10) || 0;
+          this.payedMoney = num;
+          this.displayValue = num > 0 ? num.toString() : '';
+          event.target.value = num > 0 ? this.formatDisplayMoney(num) : '';
         },
 
         append(number) {
@@ -277,47 +328,55 @@
             this.setExactPayment();
             return;
           }
-          if (number === 'backspace') {
-            this.displayValue = this.displayValue.slice(0, -1);
+          if (number === 'clear') {
+            this.displayValue = '';
+            this.payedMoney = 0;
             if (this.$refs.payedMoney) {
-              this.$refs.payedMoney.value = this.displayValue ? this.formatMoney(this.displayValue) : '';
+              this.$refs.payedMoney.value = '';
             }
-            this.changes();
             return;
           }
-          this.displayValue += number.toString();
-          if (this.$refs.payedMoney) {
-            this.$refs.payedMoney.value = this.formatMoney(this.displayValue);
-          }
-          this.changes();
-        },
-
-        changes() {
-          let val = this.$refs.payedMoney ? this.$refs.payedMoney.value : this.displayValue;
-          let numericValue = (val || '').toString().replace(/\D/g, '');
-          let num = parseInt(numericValue, 10);
-          num = isNaN(num) ? 0 : num;
-
-          this.displayValue = num > 0 ? num.toString() : '';
-
-          if (this.isQris) {
-            if (this.$wire) {
-              this.$wire.set('cartDetail.money_changes', 0);
-              this.$wire.set('cartDetail.payed_money', Number(this.subtotal) || 0);
+          if (number === 'backspace') {
+            this.displayValue = this.displayValue.slice(0, -1);
+            let num = parseInt(this.displayValue, 10) || 0;
+            this.payedMoney = num;
+            if (this.$refs.payedMoney) {
+              this.$refs.payedMoney.value = num > 0 ? this.formatDisplayMoney(num) : '';
             }
-            if (this.$refs.moneyChanges) {
-              this.$refs.moneyChanges.textContent = this.formatMoney(0);
+            return;
+          }
+          if (number === '000') {
+            if (this.displayValue && this.displayValue !== '0') {
+              this.displayValue += '000';
+            }
+          } else if (number === '0') {
+            if (this.displayValue && this.displayValue !== '0') {
+              this.displayValue += '0';
             }
           } else {
-            const changesVal = num - Number(this.subtotal);
-            if (this.$wire) {
-              this.$wire.set('cartDetail.money_changes', changesVal);
-              this.$wire.set('cartDetail.payed_money', num);
+            if (this.displayValue === '0') {
+              this.displayValue = number.toString();
+            } else {
+              this.displayValue += number.toString();
             }
+          }
+          let num = parseInt(this.displayValue, 10) || 0;
+          this.payedMoney = num;
+          if (this.$refs.payedMoney) {
+            this.$refs.payedMoney.value = num > 0 ? this.formatDisplayMoney(num) : '';
+          }
+        },
 
-            if (this.$refs.moneyChanges) {
-              this.$refs.moneyChanges.textContent = this.formatMoney(changesVal);
-            }
+        submitPayment() {
+          const payed = this.isQris ? Number(this.subtotal) : (Number(this.payedMoney) || 0);
+          const changes = this.isQris ? 0 : Math.max(0, payed - Number(this.subtotal));
+          const methodId = this.selectedMethodId || (this.selectedPaymentMethod ? this.selectedPaymentMethod.id : null);
+
+          if (this.$wire) {
+            this.$wire.set('cartDetail.payment_method_id', methodId);
+            this.$wire.set('cartDetail.payed_money', payed);
+            this.$wire.set('cartDetail.money_changes', changes);
+            this.$wire.proceedThePayment();
           }
         }
       };
@@ -334,150 +393,190 @@
   </script>
 
   <x-filament::modal id="proceed-the-payment" width="5xl">
-    <form wire:submit.prevent="proceedThePayment">
-      <input type="hidden" wire:model="cartDetail.payment_method_id" />
-      <input type="hidden" wire:model="cartDetail.payed_money" />
-      <input type="hidden" wire:model="cartDetail.money_changes" />
+    <div x-data="detail()" class="my-2 grid gap-x-6 md:grid-cols-2">
+      <form x-on:submit.prevent="submitPayment" class="space-y-3">
+        <input type="hidden" wire:model="cartDetail.payment_method_id" />
+        <input type="hidden" wire:model="cartDetail.payed_money" />
+        <input type="hidden" wire:model="cartDetail.money_changes" />
 
-      <div class="my-2 grid gap-x-6 md:grid-cols-2">
-        <div x-data="detail()" class="space-y-3">
-          {{-- Payment Method Tabs --}}
-          <div>
-            <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
-              {{ __('Payment Method') }}
-            </label>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <template x-for="paymentMethod in paymentMethods" :key="paymentMethod.id">
-                <button
-                  type="button"
-                  x-on:click="selectPaymentMethod(paymentMethod)"
-                  class="flex items-center justify-center gap-1.5 rounded-lg border py-2 px-3 text-sm font-semibold transition-all hover:scale-[1.02]"
-                  :class="(cartDetail && cartDetail['payment_method_id'] == paymentMethod.id) ?
-                    'bg-lakasir-primary text-white border-lakasir-primary shadow-sm' :
-                    'bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700'">
-                  <span x-text="paymentMethod.name"></span>
-                </button>
-              </template>
-            </div>
-          </div>
-
-          {{-- Customer Name Input --}}
-          <x-filament::input.wrapper>
-            <x-slot name="prefix">
-              {{ __('Customer') }}
-            </x-slot>
-            <x-filament::input type="text" wire:model="cartDetail.customer_name" placeholder="{{ __('Customer Name (Optional)') }}" />
-          </x-filament::input.wrapper>
-
-          {{-- Due Date if Credit --}}
-          <x-filament::input.wrapper
-            x-show="paymentMethods.filter((pm) => pm.is_credit)[0]?.id == (cartDetail ? cartDetail['payment_method_id'] : null)"
-            :valid="!$errors->has('due_date')">
-            <x-slot name="prefix">
-              {{ __('Due date') }}
-            </x-slot>
-            <x-filament::input type="date" wire:model="cartDetail.due_date" />
-          </x-filament::input.wrapper>
-
-          {{-- Total & Changes Summary Section --}}
-          <div>
-            @include('filament.tenant.pages.cashier.total')
-          </div>
-
-          {{-- CASH PAYMENT SECTION: Display Input, Smart Suggestions, & Numpad --}}
-          <div x-show="isCash" class="space-y-2.5">
-            @error('payed_money')
-              <span class="error text-danger-500 text-sm font-medium">{{ $message }}</span>
-            @enderror
-
-            {{-- Custom / Keyboard Amount Input --}}
-            <div>
-              <input id="display"
-                class="@error('payed_money') 'border-danger-500' @enderror w-full rounded-lg border border-gray-300 bg-white p-2.5 text-right text-xl font-bold text-gray-900 focus:border-lakasir-primary focus:ring-1 focus:ring-lakasir-primary outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-white"
-                :disabled="isTouchScreen"
-                x-mask:dynamic="$money($input)"
-                x-on:input="changes"
-                x-on:keyup="changes"
-                x-ref="payedMoney"
-                placeholder="0"
-                inputMode="numeric">
-            </div>
-
-            {{-- Smart Suggestion Buttons: [Uang Pas] + [Pecahan Terdekat] --}}
-            <div class="grid grid-cols-4 gap-1.5">
-              <button type="button"
-                class="rounded-lg bg-orange-100 hover:bg-orange-200 dark:bg-orange-950/40 dark:hover:bg-orange-900/60 text-lakasir-primary font-bold py-2 text-sm border border-orange-200 dark:border-orange-800/50 transition-all text-center truncate px-1"
-                x-on:click="setExactPayment">
-                {{ __('Uang Pas') }}
+        {{-- Payment Method Tabs --}}
+        <div>
+          <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 block">
+            {{ __('Payment Method') }}
+          </label>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <template x-for="paymentMethod in paymentMethods" :key="paymentMethod.id">
+              <button
+                type="button"
+                x-on:click="selectPaymentMethod(paymentMethod)"
+                class="flex items-center justify-center gap-1.5 rounded-lg border py-2 px-3 text-sm font-semibold transition-all hover:scale-[1.02]"
+                :class="(selectedPaymentMethod && selectedPaymentMethod.id == paymentMethod.id) ?
+                  'bg-lakasir-primary text-white border-lakasir-primary shadow-sm' :
+                  'bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700'">
+                <span x-text="paymentMethod.name"></span>
               </button>
-              <template x-for="val in suggestions" :key="val">
-                <button type="button"
-                  class="rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-semibold py-2 text-sm border border-gray-200 dark:border-gray-700 transition-all text-center truncate px-1"
-                  x-on:click="shortcut(val)"
-                  x-text="formatMoney(val)">
-                </button>
-              </template>
-            </div>
+            </template>
+          </div>
+        </div>
 
-            {{-- Numpad Calculator --}}
-            <div class="grid grid-cols-3 gap-1.5">
-              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 p-2 text-lg font-medium" x-on:click="append(7)">7</button>
-              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 p-2 text-lg font-medium" x-on:click="append(8)">8</button>
-              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 p-2 text-lg font-medium" x-on:click="append(9)">9</button>
-              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 p-2 text-lg font-medium" x-on:click="append(4)">4</button>
-              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 p-2 text-lg font-medium" x-on:click="append(5)">5</button>
-              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 p-2 text-lg font-medium" x-on:click="append(6)">6</button>
-              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 p-2 text-lg font-medium" x-on:click="append(1)">1</button>
-              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 p-2 text-lg font-medium" x-on:click="append(2)">2</button>
-              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 p-2 text-lg font-medium" x-on:click="append(3)">3</button>
-              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 p-2 text-lg font-medium" x-on:click="append('.')">.</button>
-              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 p-2 text-lg font-medium" x-on:click="append(0)">0</button>
-              <button type="button" class="flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 p-2 text-lg font-medium" x-on:click="append('backspace')">
+        {{-- Customer Name Input --}}
+        <x-filament::input.wrapper>
+          <x-slot name="prefix">
+            {{ __('Customer') }}
+          </x-slot>
+          <x-filament::input type="text" wire:model="cartDetail.customer_name" placeholder="{{ __('Customer Name (Optional)') }}" />
+        </x-filament::input.wrapper>
+
+        {{-- Due Date if Credit --}}
+        <x-filament::input.wrapper
+          x-show="paymentMethods.filter((pm) => pm.is_credit)[0]?.id == (selectedPaymentMethod ? selectedPaymentMethod.id : null)"
+          :valid="!$errors->has('due_date')">
+          <x-slot name="prefix">
+            {{ __('Due date') }}
+          </x-slot>
+          <x-filament::input type="date" wire:model="cartDetail.due_date" />
+        </x-filament::input.wrapper>
+
+        {{-- Total & Changes Summary Section --}}
+        <div>
+          @include('filament.tenant.pages.cashier.total')
+          <div class="flex justify-between mt-3">
+            <p class="font-bold">{{ __('Money changes') }}</p>
+            <p class="font-bold text-lakasir-primary" x-text="formatMoney(moneyChanges)"></p>
+          </div>
+        </div>
+
+        {{-- CASH PAYMENT SECTION: Display Input, Smart Suggestions, & Numpad --}}
+        <div x-show="isCash" class="space-y-3 pt-1">
+          @error('payed_money')
+            <span class="error text-danger-500 text-sm font-medium">{{ $message }}</span>
+          @enderror
+
+          {{-- Custom / Keyboard Amount Input --}}
+          <div class="relative flex items-center">
+            <input id="display"
+              class="@error('payed_money') 'border-danger-500' @enderror w-full rounded-lg border border-gray-300 bg-white p-2.5 pr-10 text-right text-xl font-bold text-gray-900 focus:border-lakasir-primary focus:ring-1 focus:ring-lakasir-primary outline-none dark:bg-gray-900 dark:border-gray-700 dark:text-white"
+              :disabled="isTouchScreen"
+              x-on:input="onInput($event)"
+              x-ref="payedMoney"
+              placeholder="0"
+              inputMode="numeric">
+            <button type="button"
+              x-show="displayValue && displayValue !== '0'"
+              x-on:click="append('clear')"
+              class="absolute right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+              <x-filament::icon icon="heroicon-m-x-mark" class="h-5 w-5" />
+            </button>
+          </div>
+
+          {{-- Smart Suggestion Buttons: [Uang Pas] + [Pecahan Terdekat] --}}
+          <div class="grid grid-cols-4 gap-2">
+            <button type="button"
+              class="rounded-lg bg-orange-100 hover:bg-orange-200 active:bg-orange-300 dark:bg-orange-950/40 dark:hover:bg-orange-900/60 text-lakasir-primary font-bold py-2.5 px-1 text-sm border border-orange-200 dark:border-orange-800/50 transition-all text-center truncate shadow-xs"
+              x-on:click="setExactPayment">
+              {{ __('Uang Pas') }}
+            </button>
+            <template x-for="val in suggestions" :key="val">
+              <button type="button"
+                class="rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-semibold py-2.5 px-1 text-sm border border-gray-200 dark:border-gray-700 transition-all text-center truncate shadow-xs"
+                x-on:click="shortcut(val)"
+                x-text="formatShortcut(val)">
+              </button>
+            </template>
+          </div>
+
+          {{-- Numpad Calculator with Clear Spacing / Margin --}}
+          <div class="mt-4 pt-3 border-t border-gray-200/80 dark:border-gray-700/80">
+            <div class="grid grid-cols-3 gap-2">
+              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 py-2.5 text-xl font-semibold transition-all shadow-xs" x-on:click="append(7)">7</button>
+              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 py-2.5 text-xl font-semibold transition-all shadow-xs" x-on:click="append(8)">8</button>
+              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 py-2.5 text-xl font-semibold transition-all shadow-xs" x-on:click="append(9)">9</button>
+              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 py-2.5 text-xl font-semibold transition-all shadow-xs" x-on:click="append(4)">4</button>
+              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 py-2.5 text-xl font-semibold transition-all shadow-xs" x-on:click="append(5)">5</button>
+              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 py-2.5 text-xl font-semibold transition-all shadow-xs" x-on:click="append(6)">6</button>
+              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 py-2.5 text-xl font-semibold transition-all shadow-xs" x-on:click="append(1)">1</button>
+              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 py-2.5 text-xl font-semibold transition-all shadow-xs" x-on:click="append(2)">2</button>
+              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 py-2.5 text-xl font-semibold transition-all shadow-xs" x-on:click="append(3)">3</button>
+              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 py-2.5 text-base font-bold transition-all shadow-xs" x-on:click="append('000')">000</button>
+              <button type="button" class="rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 py-2.5 text-xl font-semibold transition-all shadow-xs" x-on:click="append(0)">0</button>
+              <button type="button" class="flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100 py-2.5 transition-all shadow-xs" x-on:click="append('backspace')">
                 <x-filament::icon icon="heroicon-o-backspace" class="h-5 w-5 text-gray-600 dark:text-gray-300" />
               </button>
             </div>
           </div>
-
-          {{-- QRIS PAYMENT SECTION: Minimalist Clean Display --}}
-          <div x-show="isQris" class="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/40 p-5 text-center space-y-1">
-            <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{{ __('Non-Cash (QRIS)') }}</p>
-            <p class="text-2xl font-bold text-lakasir-primary" x-text="formatMoney(subtotal)"></p>
-            <p class="text-xs text-gray-500 dark:text-gray-400">{{ __('Nominal pas otomatis terpilih tanpa uang kembalian') }}</p>
-          </div>
-
-          {{-- Action Buttons: Pay & Close --}}
-          <div class="flex gap-2 pt-2">
-            <button wire:loading.attr="disabled" type="submit"
-              class="flex flex-1 items-center justify-center gap-x-2 rounded-lg bg-lakasir-primary p-3 text-base font-bold text-white hover:bg-[#ff6611] transition-all shadow-sm">
-              <div wire:loading>
-                <x-filament::loading-indicator class="h-5 w-5" />
-              </div>
-              {{ __('Pay it') }}
-            </button>
-            <button wire:click="dispatch('close-modal', {id: 'proceed-the-payment'});" type="button"
-              class="flex flex-1 items-center justify-center gap-x-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 p-3 text-base font-semibold text-gray-800 dark:text-gray-200 transition-all">
-              {{ __('Close') }}
-            </button>
-          </div>
         </div>
-        <div class="hidden max-h-[80vh] overflow-y-scroll md:block">
-          @if ($errors->any())
-            @foreach ($errors->all() as $error)
-              <p class="error w-full text-center text-lg text-danger-500">{{ $error }}</p>
-            @endforeach
-          @endif
-          @include('filament.tenant.pages.cashier.items')
+
+        {{-- QRIS PAYMENT SECTION: Minimalist Clean Display --}}
+        <div x-show="isQris" class="rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/40 p-5 text-center space-y-1">
+          <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{{ __('Non-Cash (QRIS)') }}</p>
+          <p class="text-2xl font-bold text-lakasir-primary" x-text="formatMoney(subtotal)"></p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">{{ __('Nominal pas otomatis terpilih tanpa uang kembalian') }}</p>
         </div>
+
+        {{-- Action Buttons: Pay & Close --}}
+        <div class="flex gap-2 pt-2">
+          <button wire:loading.attr="disabled" type="button" x-on:click="submitPayment"
+            class="flex flex-1 items-center justify-center gap-x-2 rounded-lg bg-lakasir-primary p-3 text-base font-bold text-white hover:bg-[#ff6611] transition-all shadow-sm">
+            <div wire:loading>
+              <x-filament::loading-indicator class="h-5 w-5" />
+            </div>
+            {{ __('Pay it') }}
+          </button>
+          <button wire:click="dispatch('close-modal', {id: 'proceed-the-payment'});" type="button"
+            class="flex flex-1 items-center justify-center gap-x-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 p-3 text-base font-semibold text-gray-800 dark:text-gray-200 transition-all">
+            {{ __('Close') }}
+          </button>
+        </div>
+      </form>
+      <div class="hidden max-h-[80vh] overflow-y-scroll md:block">
+        @if ($errors->any())
+          @foreach ($errors->all() as $error)
+            <p class="error w-full text-center text-lg text-danger-500">{{ $error }}</p>
+          @endforeach
+        @endif
+        @include('filament.tenant.pages.cashier.items')
       </div>
-    </form>
+    </div>
   </x-filament::modal>
   <x-filament::modal id="success-modal" width="xl" :close-by-clicking-away="false" :close-by-escaping="false">
-    <div class="flex flex-col items-center justify-center">
+    <div x-data="{
+        changesAmount: 0,
+        init() {
+          const update = (s) => {
+            if (s && s.money_changes != null) {
+              this.changesAmount = Number(s.money_changes) || 0;
+            }
+          };
+          window.addEventListener('selling-created', (e) => {
+            const s = e.detail?.selling || e.detail?.[0]?.selling || e.detail;
+            update(s);
+          });
+          if (this.$wire) {
+            this.$wire.on('selling-created', (data) => {
+              const s = data?.selling || data?.[0]?.selling || data;
+              update(s);
+            });
+          }
+          window.addEventListener('open-modal', (e) => {
+            if (e.detail?.id === 'success-modal' && e.detail?.money_changes != null) {
+              this.changesAmount = Number(e.detail.money_changes) || 0;
+            }
+          });
+        },
+        format(val) {
+          if (typeof window.moneyFormat === 'function') {
+            return window.moneyFormat(val);
+          }
+          const num = Number(val) || 0;
+          return (window.lakasirCurrency ? window.lakasirCurrency + ' ' : 'IDR ') + new Intl.NumberFormat('id-ID').format(num);
+        }
+      }"
+      class="flex flex-col items-center justify-center">
       <x-heroicon-o-check-circle style="color: rgb(34 197 94); width: 200px" />
       <p class="">@lang('Success')</p>
       <p class="text-3xl font-bold">
         @lang('Change'):
-        <span id="changes"></span>
+        <span id="changes" x-text="format(changesAmount)"></span>
       </p>
     </div>
     <x-slot name="footer">
@@ -727,7 +826,7 @@
     let selling = null;
     $wire.on('selling-created', (event) => {
       selling = event.selling || event[0]?.selling || event;
-      const changesVal = (selling && selling.money_changes != null) ? selling.money_changes : 0;
+      const changesVal = (selling && selling.money_changes != null) ? Number(selling.money_changes) : 0;
 
       $wire.dispatch('close-modal', {
         id: 'proceed-the-payment'
@@ -739,13 +838,7 @@
 
       window.dispatchEvent(new CustomEvent('close-modal', { detail: { id: 'proceed-the-payment' } }));
       window.dispatchEvent(new CustomEvent('open-modal', { detail: { id: 'success-modal', money_changes: changesVal } }));
-
-      setTimeout(() => {
-        const changesEl = document.getElementById('changes');
-        if (changesEl) {
-          changesEl.innerHTML = typeof window.moneyFormat === 'function' ? window.moneyFormat(changesVal) : new Intl.NumberFormat('id-ID').format(changesVal);
-        }
-      }, 150);
+      window.dispatchEvent(new CustomEvent('selling-created', { detail: { selling: selling } }));
     });
     function formatReceiptMoney(number, showCurrency = false) {
       const num = Number(number) || 0;
@@ -757,7 +850,7 @@
       return showCurrency ? ('Rp ' + formatted) : formatted;
     }
 
-    document.getElementById("printReceiptButton").addEventListener('click', async (event) => {
+    async function handleCashierPrintReceipt(event) {
       let about = @js($about);
       const printerData = getPrinter();
       const showCurrency = Boolean(printerData?.show_currency ?? @js(\App\Models\Tenants\Setting::get('receipt_show_currency', false)));
@@ -879,7 +972,14 @@
             .send();
         }
       }
-    });
+    }
+
+    // Guard against duplicate listeners
+    const printReceiptBtn = document.getElementById("printReceiptButton");
+    if (printReceiptBtn) {
+      printReceiptBtn.removeEventListener('click', handleCashierPrintReceipt);
+      printReceiptBtn.addEventListener('click', handleCashierPrintReceipt);
+    }
 
     Alpine.data('fullscreen', () => {
       return {
@@ -947,11 +1047,6 @@
         setTimeout(setupInput, 300);
       }
 
-      let totalEl = document.querySelector('[x-ref="total"]');
-      let totalPrice = totalEl ? totalEl.getAttribute('data-value') : null;
-      if ("@js(feature(PaymentShortcutButton::class))" == 'true' && totalPrice) {
-        generateButton(totalPrice);
-      }
       modalOpened = true;
     }
 
