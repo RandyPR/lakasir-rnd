@@ -826,6 +826,7 @@
     let selling = null;
     $wire.on('selling-created', (event) => {
       selling = event.selling || event[0]?.selling || event;
+      window._lakasirLastSelling = selling;
       const changesVal = (selling && selling.money_changes != null) ? Number(selling.money_changes) : 0;
 
       $wire.dispatch('close-modal', {
@@ -863,6 +864,7 @@
         printReceiptBtn.style.opacity = '0.6';
       }
 
+      const activeSelling = selling || window._lakasirLastSelling;
       let about = @js($about);
       const printerData = getPrinter();
       const showCurrency = Boolean(printerData?.show_currency ?? @js(\App\Models\Tenants\Setting::get('receipt_show_currency', false)));
@@ -878,104 +880,113 @@
               .button()
               .url('/member/printer'),
             ])
-            .send()
-        } else {
-          const printer = new Printer(printerData);
-          let printerAction = printer;
-          const logo = printerData.logo || window.lakasirReceiptLogo;
-          if (logo && printerData.driver !== 'bluetooth') {
-            await printerAction.image(logo, printerData.paper_width || window.lakasirReceiptPaperWidth || 58);
-          }
-          printerAction.font('a');
-          if (about != undefined || about != null) {
-            printerAction.size(1)
-              .align('center')
-              .text(about.shop_name)
-              .size(0)
-              .text(about.shop_location);
-            if (printerData.header != undefined) {
-              printerAction
-                .text(printerData.header);
-            }
-          }
+            .send();
+          return;
+        }
 
-          if (selling.daily_order_number || selling.formatted_daily_order_number) {
-            const orderLabel = selling.formatted_daily_order_number || ('Order #' + String(selling.daily_order_number).padStart(3, '0'));
-            printerAction
-              .align('center')
-              .size(1, 1)
-              .style('bold')
-              .text(orderLabel)
-              .style('normal')
-              .size(0, 0);
+        if (!activeSelling) {
+          new FilamentNotification()
+            .title('Data transaksi tidak ditemukan untuk dicetak.')
+            .warning()
+            .send();
+          return;
+        }
+
+        const printer = new (window.Printer || Printer)(printerData);
+        let printerAction = printer;
+        const logo = printerData.logo || window.lakasirReceiptLogo;
+        if (logo && printerData.driver !== 'bluetooth') {
+          await printerAction.image(logo, printerData.paper_width || window.lakasirReceiptPaperWidth || 58);
+        }
+        printerAction.font('a');
+        if (about != undefined && about != null) {
+          printerAction.size(1)
+            .align('center')
+            .text(about.shop_name || '')
+            .size(0)
+            .text(about.shop_location || '');
+          if (printerData.header != undefined && printerData.header) {
+            printerAction.text(printerData.header);
           }
+        }
 
-          printerAction.align('left')
-            .text('-------------------------------');
-
-          printerAction.table(['@lang('Cashier')', selling.user.name]);
-          if (selling.table != undefined && selling.table != null) {
-            printerAction.table(['@lang('Table')', selling.table.number]);
-          }
-          printerAction.table(['@lang('Payment method')', selling.payment_method.name]);
-
-          let customerDisplay = '@lang('General')';
-          if (selling.customer_name) {
-            customerDisplay = selling.customer_name;
-          } else if (selling.member && selling.member.name) {
-            customerDisplay = selling.member.name;
-          }
-          printerAction.table(['@lang('Customer')', customerDisplay]);
-
+        if (activeSelling.daily_order_number || activeSelling.formatted_daily_order_number) {
+          const orderLabel = activeSelling.formatted_daily_order_number || ('Order #' + String(activeSelling.daily_order_number).padStart(3, '0'));
           printerAction
-            .text('-------------------------------');
-          selling.selling_details.forEach(sellingDetail => {
-            let price = sellingDetail.price;
-            let text = formatReceiptMoney(sellingDetail.price / sellingDetail.qty, showCurrency) + ' x ' + sellingDetail.qty
-              .toString();
-            printerAction.table([sellingDetail.product.name, formatReceiptMoney(sellingDetail.price / sellingDetail
-              .qty, showCurrency) + ' x ' + sellingDetail.qty.toString()])
+            .align('center')
+            .size(1, 1)
+            .style('bold')
+            .text(orderLabel)
+            .style('normal')
+            .size(0, 0);
+        }
+
+        printerAction.align('left')
+          .text('-------------------------------');
+
+        printerAction.table(['@lang('Cashier')', activeSelling.user?.name || activeSelling.user?.cashier_name || '']);
+        if (activeSelling.table != undefined && activeSelling.table != null) {
+          printerAction.table(['@lang('Table')', String(activeSelling.table.number || '')]);
+        }
+        const paymentMethodName = activeSelling.payment_method?.name || activeSelling.paymentMethod?.name || 'Cash';
+        printerAction.table(['@lang('Payment method')', paymentMethodName]);
+
+        let customerDisplay = '@lang('General')';
+        if (activeSelling.customer_name) {
+          customerDisplay = activeSelling.customer_name;
+        } else if (activeSelling.member && activeSelling.member.name) {
+          customerDisplay = activeSelling.member.name;
+        }
+        printerAction.table(['@lang('Customer')', customerDisplay]);
+
+        printerAction.text('-------------------------------');
+        const details = activeSelling.selling_details || activeSelling.sellingDetails || [];
+        if (Array.isArray(details)) {
+          details.forEach(sellingDetail => {
+            let price = Number(sellingDetail.price) || 0;
+            let qty = Number(sellingDetail.qty) || 1;
+            let unitPrice = price / qty;
+            let productName = sellingDetail.product?.name || '';
+            printerAction.table([productName, formatReceiptMoney(unitPrice, showCurrency) + ' x ' + qty.toString()]);
             if (sellingDetail.discount_price > 0) {
-              price = price - sellingDetail.discount_price;
+              price = price - Number(sellingDetail.discount_price);
               printerAction
                 .align('right')
-                .text(`(${formatReceiptMoney(sellingDetail.discount_price, showCurrency)})`)
+                .text(`(${formatReceiptMoney(sellingDetail.discount_price, showCurrency)})`);
             }
             printerAction
               .align('right')
               .text(formatReceiptMoney(price, showCurrency))
-              .align('left')
+              .align('left');
           });
-          printerAction
-            .text('-------------------------------');
-          if ("@js(feature(SellingTax::class))" == 'true') {
-            printerAction.table(['@lang('Tax')', `${selling.tax}%`])
-              .table(['@lang('Tax price')', formatReceiptMoney(selling.tax_price, showCurrency)]);
-          }
-          printerAction
-            .table(['@lang('Subtotal')', formatReceiptMoney(selling.total_price, showCurrency)])
-          if ("@js(feature(Discount::class))" == 'true') {
-            printerAction
-              .table(['@lang('Discount')',
-                `(${formatReceiptMoney(selling.total_discount_per_item + selling.discount_price, showCurrency)})`
-              ])
-          }
-          printerAction
-            .table(['@lang('Total price')', formatReceiptMoney(selling.grand_total_price, showCurrency)])
-            .text('-------------------------------')
-            .table(['@lang('Payed money')', formatReceiptMoney(selling.payed_money, showCurrency)])
-            .table(['@lang('Change')', formatReceiptMoney(selling.money_changes, showCurrency)])
-            .align('center');
-
-          if (printerData.footer != undefined) {
-            printerAction
-              .text(printerData.footer);
-          }
-
-          await printerAction
-            .cut()
-            .print();
         }
+        printerAction.text('-------------------------------');
+        if ("@js(feature(SellingTax::class))" == 'true') {
+          printerAction.table(['@lang('Tax')', `${activeSelling.tax ?? 0}%`])
+            .table(['@lang('Tax price')', formatReceiptMoney(activeSelling.tax_price ?? 0, showCurrency)]);
+        }
+        printerAction
+          .table(['@lang('Subtotal')', formatReceiptMoney(activeSelling.total_price ?? 0, showCurrency)]);
+        if ("@js(feature(Discount::class))" == 'true') {
+          printerAction
+            .table(['@lang('Discount')',
+              `(${formatReceiptMoney((activeSelling.total_discount_per_item ?? 0) + (activeSelling.discount_price ?? 0), showCurrency)})`
+            ]);
+        }
+        printerAction
+          .table(['@lang('Total price')', formatReceiptMoney(activeSelling.grand_total_price ?? 0, showCurrency)])
+          .text('-------------------------------')
+          .table(['@lang('Payed money')', formatReceiptMoney(activeSelling.payed_money ?? 0, showCurrency)])
+          .table(['@lang('Change')', formatReceiptMoney(activeSelling.money_changes ?? 0, showCurrency)])
+          .align('center');
+
+        if (printerData.footer != undefined && printerData.footer) {
+          printerAction.text(printerData.footer);
+        }
+
+        await printerAction
+          .cut()
+          .print();
       } catch (error) {
         console.error(error);
         if (typeof FilamentNotification !== 'undefined') {

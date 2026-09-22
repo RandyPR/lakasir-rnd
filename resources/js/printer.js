@@ -436,6 +436,58 @@ class Printer {
     }
   }
 
+  static async requestBluetoothPicker() {
+    if (typeof navigator.bluetooth === 'undefined') {
+      if (typeof window !== 'undefined' && !window.isSecureContext) {
+        throw new Error('Web Bluetooth API diblokir oleh browser karena situs tidak dibuka via HTTPS atau http://localhost.');
+      }
+      throw new Error('Web Bluetooth API tidak didukung di browser ini.');
+    }
+
+    const bleServiceUuids = [
+      '000018f0-0000-1000-8000-00805f9b34fb',
+      '0000ffe0-0000-1000-8000-00805f9b34fb',
+      '0000fff0-0000-1000-8000-00805f9b34fb',
+      '0000ff00-0000-1000-8000-00805f9b34fb',
+      '0000ae30-0000-1000-8000-00805f9b34fb',
+      '0000fee7-0000-1000-8000-00805f9b34fb',
+      '0000fee0-0000-1000-8000-00805f9b34fb',
+      'e7810a71-73ae-499d-8c15-faa9aef0c3f1',
+      '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+      '00001101-0000-1000-8000-00805f9b34fb',
+    ];
+
+    const device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: bleServiceUuids,
+    });
+
+    if (!device) return null;
+
+    if (device.gatt?.connected) {
+      try { device.gatt.disconnect(); } catch (_) {}
+    }
+
+    const server = await device.gatt.connect();
+    window.lakasirBluetoothDevice = device;
+    window.lakasirBluetoothServer = server;
+
+    // Update localStorage printer configuration
+    try {
+      const existing = localStorage.printer ? JSON.parse(localStorage.printer) : {};
+      const updated = {
+        ...existing,
+        name: device.name || 'Bluetooth Printer',
+        printer: device.name || 'Bluetooth Printer',
+        printerId: device.id,
+        driver: 'bluetooth',
+      };
+      localStorage.setItem('printer', JSON.stringify(updated));
+    } catch (_) {}
+
+    return { device, server };
+  }
+
   async printToBluetooth(data) {
     try {
       if (typeof navigator.bluetooth === 'undefined') {
@@ -461,31 +513,37 @@ class Printer {
       let device = window.lakasirBluetoothDevice;
       let server = window.lakasirBluetoothServer;
 
-      // 1. If not connected, find device or reuse cached
+      // 1. If not connected, check if existing cached device can connect
       if (!device || !device.gatt?.connected || !server) {
         server = null;
+        let foundGrantedDevice = null;
+
         if (!device && navigator.bluetooth.getDevices) {
           try {
             const devices = await navigator.bluetooth.getDevices();
             if (devices && devices.length > 0) {
-              device = devices.find(d => d.id === this.printerId) || devices[0];
+              foundGrantedDevice = devices.find(d => d.id === this.printerId) || devices[0];
             }
           } catch (e) {
-            console.warn('getDevices() warning:', e);
+            console.warn('getDevices() check warning:', e);
           }
+        }
+
+        if (foundGrantedDevice) {
+          device = foundGrantedDevice;
         }
 
         // 2. Try GATT connection with the found/cached device
         if (device) {
           try {
-            if (device.gatt?.connected) {
-              try { device.gatt.disconnect(); } catch (_) {}
-              await new Promise(r => setTimeout(r, 100));
-            }
             console.log('Connecting to Bluetooth device:', device.name || device.id);
-            server = await device.gatt.connect();
+            if (device.gatt?.connected) {
+              server = device.gatt;
+            } else {
+              server = await device.gatt.connect();
+            }
           } catch (connectErr) {
-            console.warn('Direct connect to cached device failed:', connectErr.message);
+            console.warn('Direct GATT connect failed:', connectErr.message);
             server = null;
             device = null;
           }
@@ -500,16 +558,36 @@ class Printer {
               optionalServices: bleServiceUuids,
             });
             if (device) {
-              if (device.gatt?.connected) {
-                try { device.gatt.disconnect(); } catch (_) {}
-                await new Promise(r => setTimeout(r, 100));
-              }
               server = await device.gatt.connect();
             }
           } catch (reqErr) {
             console.error('requestDevice error:', reqErr);
             if (reqErr.name === 'NotFoundError') {
               // User cancelled picker
+              return;
+            }
+            if (reqErr.name === 'SecurityError' || reqErr.message?.includes('user gesture')) {
+              // User gesture expired, show notification with direct action button
+              if (typeof FilamentNotification !== 'undefined') {
+                new FilamentNotification()
+                  .title('Koneksi Bluetooth Memerlukan Izin')
+                  .body('Klik tombol di bawah untuk memilih dan menyambungkan printer Bluetooth Anda.')
+                  .warning()
+                  .actions([
+                    new FilamentNotificationAction('Hubungkan Printer')
+                      .icon('heroicon-o-printer')
+                      .button()
+                      .color('primary')
+                      .extraAttributes({
+                        'onclick': 'window.Printer && window.Printer.requestBluetoothPicker().then(() => { if (typeof FilamentNotification !== "undefined") { new FilamentNotification().title("Printer Bluetooth terhubung. Silakan klik Print kembali.").success().send(); } })'
+                      }),
+                    new FilamentNotificationAction('Pengaturan')
+                      .icon('heroicon-o-cog-6-tooth')
+                      .button()
+                      .url('/member/printer'),
+                  ])
+                  .send();
+              }
               return;
             }
             throw reqErr;
@@ -558,7 +636,7 @@ class Printer {
 
       // 5. Send data in small chunks for Bluetooth BLE MTU
       const CHUNK_SIZE = 20;
-      const CHUNK_DELAY = 50;
+      const CHUNK_DELAY = 30;
       for (let offset = 0; offset < data.length; offset += CHUNK_SIZE) {
         const chunk = data.slice(offset, offset + CHUNK_SIZE);
         if (writeChar.properties.writeWithoutResponse) {
@@ -580,9 +658,27 @@ class Printer {
       if (typeof FilamentNotification !== 'undefined') {
         new FilamentNotification()
           .title('Gagal mencetak ke Bluetooth printer: ' + (e.message || e))
+          .body('Pastikan printer Bluetooth dalam kondisi menyala dan berada dalam jangkauan.')
           .danger()
+          .actions([
+            new FilamentNotificationAction('Pilih / Sambungkan Ulang')
+              .icon('heroicon-o-arrow-path')
+              .button()
+              .extraAttributes({
+                'onclick': 'window.Printer && window.Printer.requestBluetoothPicker()'
+              }),
+            new FilamentNotificationAction('Pengaturan')
+              .icon('heroicon-o-cog-6-tooth')
+              .button()
+              .url('/member/printer'),
+          ])
           .send();
       }
     }
   }
 }
+
+if (typeof window !== 'undefined') {
+  window.Printer = Printer;
+}
+

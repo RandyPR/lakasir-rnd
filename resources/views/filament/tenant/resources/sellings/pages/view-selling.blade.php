@@ -169,25 +169,25 @@
         return;
       }
 
-      const printer = new Printer(printerData);
+      const printer = new (window.Printer || Printer)(printerData);
       let printerAction = printer;
       const logo = printerData.logo || @js(Setting::get('receipt_logo'));
       if (logo && printerData.driver !== 'bluetooth') {
         await printerAction.image(logo, printerData.paper_width || @js(Setting::get('receipt_paper_width', '58')));
       }
       printerAction.font('a');
-      if (about != undefined || about != null) {
+      if (about != undefined && about != null) {
         printerAction.size(1)
           .align('center')
-          .text(about.shop_name)
+          .text(about.shop_name || '')
           .size(0)
-          .text(about.shop_location);
-        if (printerData.header != undefined) {
+          .text(about.shop_location || '');
+        if (printerData.header != undefined && printerData.header) {
           printerAction.text(printerData.header);
         }
       }
 
-      if (selling.daily_order_number || selling.formatted_daily_order_number) {
+      if (selling?.daily_order_number || selling?.formatted_daily_order_number) {
         const orderLabel = selling.formatted_daily_order_number || ('Order #' + String(selling.daily_order_number).padStart(3, '0'));
         printerAction
           .align('center')
@@ -201,25 +201,27 @@
       printerAction.align('left')
         .text('-------------------------------');
 
-      printerAction.table(['@lang('Cashier')', selling.user?.name || '']);
-      if (selling.table != undefined && selling.table != null) {
-        printerAction.table(['@lang('Table')', selling.table.number]);
+      printerAction.table(['@lang('Cashier')', selling?.user?.name || '']);
+      if (selling?.table != undefined && selling?.table != null) {
+        printerAction.table(['@lang('Table')', String(selling.table.number || '')]);
       }
-      printerAction.table(['@lang('Payment method')', selling.payment_method?.name || 'Cash']);
+      const paymentMethodName = selling?.payment_method?.name || selling?.paymentMethod?.name || 'Cash';
+      printerAction.table(['@lang('Payment method')', paymentMethodName]);
 
       let customerDisplay = '@lang('General')';
-      if (selling.customer_name) {
+      if (selling?.customer_name) {
         customerDisplay = selling.customer_name;
-      } else if (selling.member && selling.member.name) {
+      } else if (selling?.member && selling.member.name) {
         customerDisplay = selling.member.name;
       }
       printerAction.table(['@lang('Customer')', customerDisplay]);
 
       printerAction.text('-------------------------------');
-      if (selling.selling_details && Array.isArray(selling.selling_details)) {
-        selling.selling_details.forEach(sellingDetail => {
-          let price = sellingDetail.price;
-          let qty = sellingDetail.qty || 1;
+      const details = selling?.selling_details || selling?.sellingDetails || [];
+      if (Array.isArray(details)) {
+        details.forEach(sellingDetail => {
+          let price = Number(sellingDetail.price) || 0;
+          let qty = Number(sellingDetail.qty) || 1;
           let unitPrice = price / qty;
           let productName = sellingDetail.product?.name || '';
           printerAction.table([productName, formatReceiptMoney(unitPrice, showCurrency) + ' x ' + qty.toString()]);
@@ -237,18 +239,18 @@
       }
       printerAction.text('-------------------------------');
       if ("@js(feature(SellingTax::class))" == 'true') {
-        printerAction.table(['@lang('Tax')', `${selling.tax}%`])
-          .table(['@lang('Tax price')', formatReceiptMoney(selling.tax_price, showCurrency)]);
+        printerAction.table(['@lang('Tax')', `${selling?.tax ?? 0}%`])
+          .table(['@lang('Tax price')', formatReceiptMoney(selling?.tax_price ?? 0, showCurrency)]);
       }
       printerAction
-        .table(['@lang('Subtotal')', formatReceiptMoney(selling.total_price, showCurrency)])
-        .table(['@lang('Discount')', `(${formatReceiptMoney(selling.total_discount_per_item + selling.discount_price, showCurrency)})`])
-        .table(['@lang('Total price')', formatReceiptMoney(selling.grand_total_price, showCurrency)])
+        .table(['@lang('Subtotal')', formatReceiptMoney(selling?.total_price ?? 0, showCurrency)])
+        .table(['@lang('Discount')', `(${formatReceiptMoney((selling?.total_discount_per_item ?? 0) + (selling?.discount_price ?? 0), showCurrency)})`])
+        .table(['@lang('Total price')', formatReceiptMoney(selling?.grand_total_price ?? 0, showCurrency)])
         .text('-------------------------------')
-        .table(['@lang('Payed money')', formatReceiptMoney(selling.payed_money, showCurrency)])
-        .table(['@lang('Change')', formatReceiptMoney(selling.money_changes, showCurrency)])
+        .table(['@lang('Payed money')', formatReceiptMoney(selling?.payed_money ?? 0, showCurrency)])
+        .table(['@lang('Change')', formatReceiptMoney(selling?.money_changes ?? 0, showCurrency)])
         .align('center');
-      if (printerData.footer != undefined) {
+      if (printerData.footer != undefined && printerData.footer) {
         printerAction.text(printerData.footer);
       }
       printerAction.align('left')
