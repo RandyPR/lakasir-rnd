@@ -17,6 +17,7 @@ use App\Models\Tenants\Table;
 use App\Models\Tenants\Voucher as TenantsVoucher;
 use App\Rules\CheckProductStock;
 use App\Rules\ShouldSameWithSellingDetail;
+use App\Services\Tenants\CustomerNameService;
 use App\Services\Tenants\SellingService;
 use App\Services\VoucherService;
 use App\Traits\HasTranslatableResource;
@@ -234,6 +235,10 @@ class Cashier extends Page implements HasForms, HasTable
         } catch (\Throwable $e) {
         }
 
+        if (! empty($this->cartDetail['customer_name'])) {
+            $this->cartDetail['customer_name'] = CustomerNameService::generateDailyCustomerName($this->cartDetail['customer_name']);
+        }
+
         if (! empty($this->cartDetail['voucher'])) {
             $this->validateVoucher($this->cartDetail['voucher']);
         }
@@ -316,6 +321,13 @@ class Cashier extends Page implements HasForms, HasTable
         }
     }
 
+    public function updatedCartDetailCustomerName($value): void
+    {
+        if (! empty($value)) {
+            $this->cartDetail['customer_name'] = CustomerNameService::generateDailyCustomerName((string) $value);
+        }
+    }
+
     public function proceedThePayment(SellingService $sellingService): void
     {
         try {
@@ -332,7 +344,7 @@ class Cashier extends Page implements HasForms, HasTable
         }
 
         if (! empty($this->cartDetail['customer_name'])) {
-            $this->cartDetail['customer_name'] = trim((string) $this->cartDetail['customer_name']);
+            $this->cartDetail['customer_name'] = CustomerNameService::generateDailyCustomerName(trim((string) $this->cartDetail['customer_name']));
         } else {
             $this->cartDetail['customer_name'] = null;
         }

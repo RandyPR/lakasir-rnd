@@ -26,12 +26,12 @@ class Selling extends Model
     protected static function booted(): void
     {
         static::creating(function (Selling $selling) {
+            $targetDate = $selling->date 
+                ? \Illuminate\Support\Carbon::parse($selling->date)->toDateString() 
+                : ($selling->created_at ? $selling->created_at->toDateString() : now()->toDateString());
+
             if (empty($selling->daily_order_number)) {
                 try {
-                    $targetDate = $selling->date 
-                        ? \Illuminate\Support\Carbon::parse($selling->date)->toDateString() 
-                        : ($selling->created_at ? $selling->created_at->toDateString() : now()->toDateString());
-
                     $max = static::whereDate('date', $targetDate)->max('daily_order_number');
                     if (! $max) {
                         $max = static::whereDate('created_at', $targetDate)->max('daily_order_number');
@@ -40,6 +40,17 @@ class Selling extends Model
                     $selling->daily_order_number = ($max ?? 0) + 1;
                 } catch (\Throwable $e) {
                     unset($selling->daily_order_number);
+                }
+            }
+
+            if (! empty($selling->customer_name)) {
+                try {
+                    $selling->customer_name = \App\Services\Tenants\CustomerNameService::generateDailyCustomerName(
+                        $selling->customer_name,
+                        $targetDate,
+                        $selling->id ?? null
+                    );
+                } catch (\Throwable $e) {
                 }
             }
         });

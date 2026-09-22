@@ -424,7 +424,7 @@
           <x-slot name="prefix">
             {{ __('Customer') }}
           </x-slot>
-          <x-filament::input type="text" wire:model="cartDetail.customer_name" placeholder="{{ __('Customer Name (Optional)') }}" />
+          <x-filament::input type="text" wire:model.blur="cartDetail.customer_name" placeholder="{{ __('Customer Name (Optional)') }}" />
         </x-filament::input.wrapper>
 
         {{-- Due Date if Credit --}}
