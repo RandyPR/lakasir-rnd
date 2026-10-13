@@ -61,6 +61,12 @@
   * `npm run build or npm run dev`
 6. Create the user using `php artisan app:create-user`
 
+### Local development with Laravel Herd (Windows, single tenant)
+1. Park the project folder in Herd so it is served at `http://lakasir-rnd.test` and make sure the site uses PHP 8.4 (`composer.json` requires `^8.4`). Check with `herd isolated` and `php -v` (Herd's `php` first in PATH).
+2. `cp .env.herd.example .env`, create the MySQL database named in `DB_DATABASE`, then `composer install`, `php artisan key:generate`, `php artisan migrate --path=database/migrations/tenant --seed`.
+3. Tests: `php vendor/bin/pest` (slow: each test provisions a tenant database; run a single file while iterating).
+4. Optional code graph for AI assistants: `pip install graphifyy` then `graphify update .` (see AGENTS.md).
+
 ## Usage
 * api: localdomain.test/api/test
 * webapp: localdomain.test/member/login
