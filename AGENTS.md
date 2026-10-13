@@ -14,6 +14,26 @@ herd composer ...
 herd artisan ...
 ```
 
+### Herd setup (verified 2026-10-13)
+- Site: `http://lakasir-rnd.test` (served by Herd nginx, PHP 8.4.x as required by `composer.json` `^8.4`).
+- The global `php` on PATH may be a different version (e.g. `C:\php85`). Put Herd first or call it explicitly, then check `php -v` says 8.4:
+  ```powershell
+  $env:Path = "$env:USERPROFILE\.config\herd\bin;$env:Path"
+  ```
+- Env: `cp .env.herd.example .env` (127.0.0.1 MySQL, database/session/cache/queue drivers, no Redis/Docker), then `php artisan key:generate`.
+- Tests (Pest) create a tenant database per test, about 15s each; run a single file while iterating: `php vendor/bin/pest tests/Feature/<File>.php`.
+- `php artisan migrate:status` against your dev DB may list Pending migrations (some drop tables); review before running `migrate` on data you care about.
+
+### graphify (code knowledge graph)
+```bash
+pip install graphifyy                 # PyPI name has two y's; CLI is `graphify`
+graphify install --platform agents    # refresh the skill if graphify warns it is outdated
+graphify update .                     # build/refresh graph without an LLM (~15s); writes graphify-out/ (gitignored)
+graphify explain "SomeClass"          # explain a node
+graphify path "A" "B"                 # shortest path between two nodes
+```
+Read `graphify-out/GRAPH_REPORT.md` before broad codebase searches.
+
 ### Dependencies
 ```bash
 herd composer install    # Install PHP dependencies
@@ -73,7 +93,7 @@ use Illuminate\Http\JsonResponse;
 - **Braces:** PSR-12 style (opening brace on same line)
 
 ### Type Annotations
-- Use PHP 8.1+ typed properties and return types
+- Use PHP 8.4 typed properties and return types
 - Always declare parameter types and return types
 ```php
 public function index(): JsonResponse
