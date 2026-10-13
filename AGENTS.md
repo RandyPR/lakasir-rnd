@@ -20,8 +20,8 @@ herd artisan ...
   ```powershell
   $env:Path = "$env:USERPROFILE\.config\herd\bin;$env:Path"
   ```
-- Env: `cp .env.herd.example .env` (127.0.0.1 MySQL, database/session/cache/queue drivers, no Redis/Docker), then `php artisan key:generate`.
-- Tests (Pest) create a tenant database per test, about 15s each; run a single file while iterating: `php vendor/bin/pest tests/Feature/<File>.php`.
+- Env: `cp .env.herd.example .env` (SQLite at `database/database.sqlite`, file cache, database session/queue, no MySQL/Redis/Docker), then `php artisan key:generate`.
+- Tests (Pest) still use MySQL and create a tenant database per test (about 15s each, `DROP DATABASE` is MySQL-only), so they need a MySQL server; run a single file while iterating: `php vendor/bin/pest tests/Feature/<File>.php`.
 - `php artisan migrate:status` against your dev DB may list Pending migrations (some drop tables); review before running `migrate` on data you care about.
 
 ### graphify (code knowledge graph)
