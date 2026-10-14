@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This is a multi-tenant Point of Sale (POS) application built with Laravel 11.x, Filament 3.x admin panel, and Livewire/Volt for reactive UI. Uses `stancl/tenancy` for multi-tenancy (database per tenant pattern).
+This is a single-tenant, single-deployment Point of Sale (POS) application built with Laravel 11.x, Filament 3.x admin panel, and Livewire/Volt for reactive UI. One shop, one database; there is no tenancy layer.
 
 ## Build/Lint/Test Commands
 
@@ -20,8 +20,8 @@ herd artisan ...
   ```powershell
   $env:Path = "$env:USERPROFILE\.config\herd\bin;$env:Path"
   ```
-- Env: `cp .env.herd.example .env` (127.0.0.1 MySQL, database/session/cache/queue drivers, no Redis/Docker), then `php artisan key:generate`.
-- Tests (Pest) create a tenant database per test, about 15s each; run a single file while iterating: `php vendor/bin/pest tests/Feature/<File>.php`.
+- Env: `cp .env.herd.example .env` (SQLite at `database/database.sqlite`, file cache, database session/queue, no MySQL/Redis/Docker), then `php artisan key:generate`.
+- Tests (Pest) run on their own SQLite file `database/testing.sqlite` (created automatically, never touches `database/database.sqlite`). `RefreshDatabaseWithTenant` migrates once per run and seeds the shop in a per-test transaction (`seedShop()` in `tests/Pest.php`). Run a single file while iterating: `php vendor/bin/pest tests/Feature/<File>.php`.
 - `php artisan migrate:status` against your dev DB may list Pending migrations (some drop tables); review before running `migrate` on data you care about.
 
 ### graphify (code knowledge graph)
@@ -58,7 +58,7 @@ herd php vendor/bin/pest --filter="test name here"       # Run specific test
 ### Database Setup
 ```bash
 herd php artisan key:generate
-herd php artisan migrate --path=database/migrations/tenant --seed
+herd php artisan migrate --seed
 herd php artisan filament:assets
 herd php artisan livewire:publish --assets
 ```
@@ -147,11 +147,10 @@ test('can create product', function () {
 
 ## Architecture Patterns
 
-### Multi-tenancy
-- Uses `stancl/tenancy` with database-per-tenant
-- Tenant models in `app/Models/Tenants/`
-- Use `RefreshDatabaseWithTenant` trait in tests
-- Call `mockTenant()` for tenant context in tests
+### Single tenant
+- One shop per deployment, one database. `stancl/tenancy` was removed; do not reintroduce `tenant()`/`tenancy()`.
+- Models live in `app/Models/Tenants/` (namespace name kept, no tenancy behind it).
+- Use `RefreshDatabaseWithTenant` trait in tests; it seeds the shop via `seedShop()` (owner `toko_testing@mail.com` / `password`).
 
 ### Filament Resources
 - Located in `app/Filament/Tenant/Resources/`
@@ -176,7 +175,7 @@ Global helpers in `app/helpers.php`:
 - `app/Filament/Tenant/Resources/` - Filament admin resources
 - `app/Services/` - Business logic services
 - `app/Policies/` - Authorization policies
-- `database/migrations/tenant/` - Tenant migrations
+- `database/migrations/` - Migrations (single database)
 - `tests/Feature/` - Feature tests
 
 ## Before Committing
