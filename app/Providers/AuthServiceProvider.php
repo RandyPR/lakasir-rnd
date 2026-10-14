@@ -2,7 +2,6 @@
 
 namespace App\Providers;
 
-use App\Models\Admin;
 use App\Models\Tenants\Category;
 use App\Models\Tenants\Member;
 use App\Models\Tenants\PaymentMethod;
@@ -31,7 +30,6 @@ use App\Policies\Tenants\SupplierPolicy;
 use App\Policies\Tenants\TablePolicy;
 use App\Policies\Tenants\UserPolicy;
 use App\Policies\Tenants\VoucherPolicy;
-use App\Tenant;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Auth;
@@ -101,11 +99,7 @@ class AuthServiceProvider extends ServiceProvider
         });
 
         ResetPassword::createUrlUsing(function ($notifiable, $token) {
-            /** @var Tenant $tenant */
-            $tenant = Tenant::whereHas('user', fn ($q) => $q->where('email', $notifiable->getEmailForPasswordReset()))->first();
-            $domaaain = $tenant->domains()->first()->domain;
-
-            return "https://$domaaain/reset-password/$token?email=".urlencode($notifiable->getEmailForPasswordReset());
+            return route('reset-password.index', ['token' => $token, 'email' => $notifiable->getEmailForPasswordReset()]);
         });
     }
 }
