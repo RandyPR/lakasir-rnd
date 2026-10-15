@@ -19,7 +19,8 @@ class Setting extends Model
     {
         $cacheKey = 'setting_'.$key;
         $result = null;
-        if (! Cache::get('setting_'.$key)) {
+        // has() so falsy values ('0', false, 0) stay cached instead of hitting the database every call.
+        if (! Cache::has($cacheKey)) {
             $setting = self::where('key', $key)->first();
 
             $result = $setting ? $setting->value ?? $default : $default;

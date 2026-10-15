@@ -242,6 +242,45 @@ class Product extends Model
         return $this->hasMany(PriceUnit::class);
     }
 
+    /**
+     * Products that may be sold from the cashier: in-stock or non-stock goods, plus services.
+     */
+    public function scopeSellableInPos(Builder $builder): Builder
+    {
+        return $builder
+            ->where('show', true)
+            ->where(function (Builder $query) {
+                $query->where('type', 'service')
+                    ->orWhere(function (Builder $query) {
+                        $query->where('type', 'product')
+                            ->where(function (Builder $query) {
+                                $query->where('is_non_stock', true)
+                                    ->orWhereExists(function ($sub) {
+                                        $sub->selectRaw('1')->from('stocks')
+                                            ->whereColumn('stocks.product_id', 'products.id')
+                                            ->where('is_ready', 1)->where('type', 'in')->where('stock', '>', 0);
+                                    });
+                            });
+                    });
+            });
+    }
+
+    /**
+     * Adds `stock_total` (same rule as stock_calculate) in a single query instead of one query per product.
+     */
+    public function scopeWithStockTotal(Builder $builder): Builder
+    {
+        $method = Setting::get('selling_method', env('SELLING_METHOD', 'fifo'));
+
+        return $builder->addSelect(['stock_total' => Stock::query()
+            ->selectRaw('coalesce(sum(stock), 0)')
+            ->whereColumn('stocks.product_id', 'products.id')
+            ->where('is_ready', 1)
+            ->where('type', 'in')
+            ->when($method !== 'normal', fn ($query) => $query->where('stock', '>', 0)),
+        ]);
+    }
+
     public function scopeInStock(Builder $builder): Builder
     {
         return $builder->where(function ($query) {

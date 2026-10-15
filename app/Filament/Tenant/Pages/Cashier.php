@@ -91,8 +91,7 @@ class Cashier extends Page implements HasForms, HasTable
         $this->locale = Profile::get()->locale ?? 'en';
 
         $this->cartItems = CartItem::query()
-            ->select('*')
-            ->with('product')
+            ->with('product', 'priceUnit')
             ->orderByDesc('created_at')
             ->cashier()
             ->get();

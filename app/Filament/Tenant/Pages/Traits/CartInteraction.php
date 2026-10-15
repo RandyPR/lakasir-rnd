@@ -9,6 +9,38 @@ use Filament\Notifications\Notification;
 
 trait CartInteraction
 {
+    /** @var array<int, float>|null product_id => qty for the current cashier, loaded once per request */
+    private ?array $cartQtyMap = null;
+
+    private function cartQtyFor(int|string $productId): ?float
+    {
+        $this->cartQtyMap ??= CartItem::query()->cashier()->pluck('qty', 'product_id')->all();
+
+        return $this->cartQtyMap[$productId] ?? null;
+    }
+
+    /**
+     * Reload only what a cart change affects (items, vouchers, totals). Unlike mount(), this keeps the
+     * customer, table and payment method the cashier already picked and skips unrelated queries.
+     */
+    public function refreshCart(): void
+    {
+        $this->cartQtyMap = null;
+        $this->cartItems = CartItem::query()
+            ->with('product', 'priceUnit')
+            ->orderByDesc('created_at')
+            ->cashier()
+            ->get();
+        $this->availableVoucher = \App\Models\Tenants\Voucher::query()
+            ->where('minimal_buying', '<=', $this->cartItems->sum('price'))
+            ->where('start_date', '<=', today()->format('Y-m-d'))
+            ->where('expired', '>=', today()->format('Y-m-d'))
+            ->get();
+        $this->calculateTotalPrice();
+        // Same as before: a cart change drops the applied voucher, the cashier re-applies it.
+        $this->cartDetail['voucher'] = null;
+    }
+
     private function validateStock(Product $product, $qty): bool
     {
         $available = $product->stock_calculate;
@@ -17,7 +49,7 @@ trait CartInteraction
                 ->title(__('Stock is out'))
                 ->danger()
                 ->send();
-            $this->mount();
+            $this->refreshCart();
 
             return false;
         }
@@ -38,7 +70,7 @@ trait CartInteraction
         } else {
             if (!$data['amount']) {
                 $this->deleteCart(CartItem::whereProductId($product->getKey())->first());
-                $this->mount();
+                $this->refreshCart();
                 return;
             }
             $qty = $data['amount'];
@@ -59,7 +91,7 @@ trait CartInteraction
                     'product_id' => $product->getKey(),
                 ]
             );
-        $this->mount();
+        $this->refreshCart();
     }
 
     public function reduceCart(Product $product)
@@ -71,7 +103,7 @@ trait CartInteraction
         if ($qty == 0) {
             $cartItem->delete();
 
-            $this->mount();
+            $this->refreshCart();
 
             return;
         }
@@ -81,13 +113,13 @@ trait CartInteraction
             'price' => $price,
         ]);
         $cartItem->save();
-        $this->mount();
+        $this->refreshCart();
     }
 
     public function deleteCart(CartItem $cartItem)
     {
         $cartItem->delete();
-        $this->mount();
+        $this->refreshCart();
     }
 
     public function addDiscountPricePerItem(CartItem $cartItem, $value)
@@ -98,14 +130,14 @@ trait CartInteraction
         $cartItem->discount_price = (float) $value;
 
         $cartItem->save();
-        $this->mount();
+        $this->refreshCart();
     }
 
     public function updateCart(CartItem $cartItem, $value)
     {
         if ((int) $value == 0) {
             $cartItem->delete();
-            $this->mount();
+            $this->refreshCart();
 
             return;
         }
@@ -115,7 +147,7 @@ trait CartInteraction
                 ->title(__('Stock is out'))
                 ->danger()
                 ->send();
-            $this->mount();
+            $this->refreshCart();
 
             return;
         }
@@ -125,7 +157,7 @@ trait CartInteraction
             'price' => $price,
         ]);
         $cartItem->save();
-        $this->mount();
+        $this->refreshCart();
     }
 
     public function clearCart()
@@ -138,7 +170,7 @@ trait CartInteraction
             ->title(__('Cart has been cleared'))
             ->success()
             ->send();
-        $this->mount();
+        $this->refreshCart();
     }
 
     public function addCartUsingScanner(string $value)

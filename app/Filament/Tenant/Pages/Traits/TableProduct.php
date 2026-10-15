@@ -22,25 +22,10 @@ trait TableProduct
     {
         return $table
             ->query(
-                // TODO: fix the query for product with this condition
-                // * hide the prodcut when the type is product but that has a 0 stock
-                // * show the product when the type is service but that has a 0 stock
-                // * show the product when the type is procut but that has a 0 stock and then has a is_non_stock true
                 Product::query()
-                    ->where(function ($query) {
-                        $query->where('type', 'product')
-                            ->where(function ($query) {
-                                $query->whereHas('stocks', function ($query) {
-                                    $query->where('is_ready', 1)
-                                        ->where('type', 'in')
-                                        ->where('stock', '>', 0);
-                                })
-                                ->orWhere('is_non_stock', true);
-                            })
-                        ->orWhere('type', 'service');
-                    })
-                    ->where('show', true)
-                    // ->orWhere('type', 'service')
+                    ->select('products.*')
+                    ->withStockTotal()
+                    ->sellableInPos()
             )
             ->defaultPaginationPageOption(12)
             ->paginationPageOptions([12])
@@ -82,7 +67,7 @@ trait TableProduct
                                 return '';
                             }
 
-                            return $product->stock < Setting::get('minimum_stock_nofication', 10)
+                            return $product->stock_total < Setting::get('minimum_stock_nofication', 10)
                                     ? 'heroicon-s-information-circle'
                                 : '';
                         })
@@ -90,7 +75,7 @@ trait TableProduct
                         ->extraAttributes([
                             'class' => 'font-bold',
                         ])
-                        ->formatStateUsing(fn (Product $product) => __('Stock').': '.$product->stock_calculate),
+                        ->formatStateUsing(fn (Product $product) => __('Stock').': '.$product->stock_total),
                 ]),
             ])
             ->contentGrid([
@@ -127,12 +112,10 @@ trait TableProduct
                     ->action(fn (Product $product, array $data) => $this->addCart($product, $data))
                     ->hiddenLabel(),
                 Action::make('cart')
-                    ->label(function (Product $product) {
-                        return $product->CartItems()->first()?->qty ?? '';
-                    })
+                    ->label(fn (Product $product) => $this->cartQtyFor($product->getKey()) ?? '')
                     ->color('white')
                     ->icon('heroicon-o-shopping-bag')
-                    ->hidden(fn (Product $product) => ! $product->CartItems()->exists()),
+                    ->hidden(fn (Product $product) => $this->cartQtyFor($product->getKey()) === null),
             ]);
     }
 }
