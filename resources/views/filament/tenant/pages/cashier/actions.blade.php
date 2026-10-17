@@ -6,6 +6,9 @@
               made inert while one is open. Opened by bootstrap.blade.php through the `lk-dialog-open` window event.
 --}}
 @php
+  $btn = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-lakasir-primary-strong disabled:cursor-not-allowed disabled:opacity-50';
+  $btnPrimary = $btn.' bg-lakasir-primary-strong text-white hover:opacity-90 dark:bg-lakasir-primary-soft dark:text-[#1f1209]';
+  $btnSecondary = $btn.' border border-gray-300 bg-white text-gray-900 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
   $canBill = $billsVisible && ($billsEnabled || $openBillId !== null);
   $inBill = $openBillId !== null && ! empty($openBill);
   $pending = (int) ($openBill['pending_count'] ?? 0);
