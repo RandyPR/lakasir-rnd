@@ -370,5 +370,11 @@
     "Import product": "Impor produk",
     "Point the cursor to this input first then scan the barcode": "Arahkan kursor ke input ini dan lalu scan barkodenya",
     "Profile": "Profil",
-    "Language": "Bahasa"
+    "Language": "Bahasa",
+    ":count items": ":count item",
+    "View order": "Lihat pesanan",
+    "Menu": "Menu",
+    "Reload": "Muat ulang",
+    "Fullscreen": "Layar penuh",
+    "Are you sure you want to clear all of the items?": "Yakin ingin mengosongkan semua item?"
 }

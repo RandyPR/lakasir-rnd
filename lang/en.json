@@ -352,5 +352,11 @@
     "Import product": "Import product",
     "Point the cursor to this input first then scan the barcode": "Point the cursor to this input first then scan the barcode",
     "Profile": "Profile",
-    "Language": "Language"
+    "Language": "Language",
+    ":count items": ":count items",
+    "View order": "View order",
+    "Menu": "Menu",
+    "Reload": "Reload",
+    "Fullscreen": "Fullscreen",
+    "Are you sure you want to clear all of the items?": "Are you sure you want to clear all of the items?"
 }
