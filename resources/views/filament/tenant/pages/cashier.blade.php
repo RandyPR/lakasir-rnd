@@ -11,6 +11,7 @@
   $locale = Profile::get()->locale ?? 'en';
   $fm = fn ($v): string => Number::currency((float) $v, in: Setting::get('currency', 'IDR'), locale: $locale);
   $fmQty = fn ($v): string => rtrim(rtrim(number_format((float) $v, 2, '.', ''), '0'), '.');
+  $ctxKey = $openBillId !== null ? 'bill'.$openBillId : 'cart';
   $dockContext = $openBill['label'] ?? ($cartDetail['customer_name'] ?? null);
 @endphp
 <div>
