@@ -219,22 +219,43 @@
                 x-text="changeLine.text"></p>
             </div>
 
-            <div class="grid grid-cols-4 gap-1.5" role="group" aria-label="{{ __('Cash received') }}">
-              <button type="button"
-                class="pay-key h-11 min-w-0 truncate rounded-lg border border-orange-300 bg-orange-50 px-1 text-[13px] font-bold text-orange-900 active:bg-orange-100 disabled:opacity-50 min-[360px]:text-sm dark:border-orange-500/40 dark:bg-orange-500/10 dark:text-orange-200"
-                data-testid="pay-quick-exact"
-                x-bind:disabled="submitting"
-                x-on:mousedown.prevent
-                x-on:click="quick(exactAmount)">{{ __('Exact amount') }}</button>
-              <template x-for="amount in suggestions" x-bind:key="amount">
+            <div class="space-y-1.5" role="group" aria-label="{{ __('Cash received') }}">
+              {{-- Fixed notes: every tap ADDS to the amount received (20.000 + 50.000 = 70.000) --}}
+              <div class="grid grid-cols-4 gap-1.5">
                 <button type="button"
-                  class="pay-key h-11 min-w-0 truncate rounded-lg border border-gray-300 bg-gray-50 px-1 text-[12px] font-semibold tabular-nums tracking-tight text-gray-900 active:bg-gray-200 disabled:opacity-50 min-[360px]:text-sm dark:border-white/15 dark:bg-white/5 dark:text-white"
-                  x-bind:data-testid="'pay-quick-' + amount"
+                  class="pay-key h-11 min-w-0 truncate rounded-lg border border-orange-300 bg-orange-50 px-1 text-[13px] font-bold text-orange-900 active:bg-orange-100 disabled:opacity-50 min-[360px]:text-sm dark:border-orange-500/40 dark:bg-orange-500/10 dark:text-orange-200"
+                  data-testid="pay-quick-exact"
                   x-bind:disabled="submitting"
                   x-on:mousedown.prevent
-                  x-on:click="quick(amount)"
-                  x-text="fmtNum(amount)"></button>
-              </template>
+                  x-on:click="quick(exactAmount)">{{ __('Exact amount') }}</button>
+                <template x-for="amount in denominations" x-bind:key="'d' + amount">
+                  <button type="button"
+                    class="pay-key h-11 min-w-0 truncate rounded-lg border px-1 text-[12px] font-semibold tabular-nums tracking-tight active:bg-gray-200 disabled:opacity-50 min-[360px]:text-sm border-gray-300 bg-gray-50 text-gray-900 dark:border-white/15 dark:bg-white/5 dark:text-white"
+                    x-bind:data-testid="'pay-add-' + amount"
+                    x-bind:disabled="submitting"
+                    x-on:mousedown.prevent
+                    x-on:click="add(amount)"
+                    x-text="'+' + fmtNum(amount)"></button>
+                </template>
+              </div>
+              {{-- Smart suggestions (the next note above the total) set the amount; Clear empties it --}}
+              <div class="grid grid-cols-3 gap-1.5">
+                <template x-for="amount in suggestions" x-bind:key="'s' + amount">
+                  <button type="button"
+                    class="pay-key h-11 min-w-0 truncate rounded-lg border px-1 text-[12px] font-semibold tabular-nums tracking-tight active:bg-gray-200 disabled:opacity-50 min-[360px]:text-sm border-gray-300 bg-white text-gray-900 dark:border-white/15 dark:bg-transparent dark:text-white"
+                    x-bind:data-testid="'pay-quick-' + amount"
+                    x-bind:disabled="submitting"
+                    x-on:mousedown.prevent
+                    x-on:click="quick(amount)"
+                    x-text="fmtNum(amount)"></button>
+                </template>
+                <button type="button"
+                  class="pay-key h-11 min-w-0 truncate rounded-lg border px-1 text-[12px] font-semibold tabular-nums tracking-tight active:bg-gray-200 disabled:opacity-50 min-[360px]:text-sm border-gray-300 bg-white text-gray-900 dark:border-white/15 dark:bg-transparent dark:text-white"
+                  data-testid="pay-quick-clear"
+                  x-bind:disabled="submitting || received === ''"
+                  x-on:mousedown.prevent
+                  x-on:click="press('clear')">{{ __('Clear') }}</button>
+              </div>
             </div>
           </div>
 

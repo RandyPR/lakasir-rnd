@@ -88,12 +88,12 @@
       return 'exact';
     };
 
-    // Up to three amounts above the total, ascending and unique: the next 5.000 / 10.000 / 20.000 ... note.
-    // Steps far smaller than the total are skipped (no 105.000 for 100.000), and the list is padded to three.
+    // Up to two amounts above the total, ascending and unique: the next 5.000 / 10.000 / 20.000 ... note.
+    // Steps far smaller than the total are skipped (no 105.000 for 100.000), and the list is padded to two.
     var suggestionsFor = function (total) {
       var base = Math.ceil(Number(total) || 0);
       if (base <= 0) {
-        return [10000, 20000, 50000];
+        return [10000, 20000];
       }
 
       var found = [];
@@ -109,12 +109,12 @@
       found.sort(function (a, b) {
         return a - b;
       });
-      while (found.length < 3) {
+      while (found.length < 2) {
         var last = found.length ? found[found.length - 1] : base;
         found.push(last + (last >= 100000 ? 100000 : 50000));
       }
 
-      return found.slice(0, 3);
+      return found.slice(0, 2);
     };
 
     // Numpad arithmetic on a string of digits: no leading zero, at most MAX_DIGITS digits.
@@ -232,6 +232,18 @@
 
       get exactAmount() {
         return Math.ceil(this.total);
+      },
+
+      denominations: [20000, 50000, 100000],
+
+      add: function (amount) {
+        if (this.submitting) {
+          return;
+        }
+
+        var sum = (Math.round(Number(this.received) || 0)) + Math.round(Number(amount) || 0);
+        this.received = String(Math.min(sum, Math.pow(10, MAX_DIGITS) - 1));
+        this.staleErrors = true;
       },
 
       get suggestions() {
