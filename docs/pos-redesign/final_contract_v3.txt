@@ -1,0 +1,599 @@
+FINAL CONTRACT v3 (v3.1, setelah tantangan 3 devils-advocate). Sumber: plan-v3.md bagian 14 + 15. Menang atas plan-v3 bagian 7 dan plan.md 11.3 / final_contract.txt (v2) untuk semua yang disebut; v2 tetap berlaku untuk ProductBrowser, struktur dasar CartItemNote, LakasirPending, detektor scanner, partial cetak v1, API aditif note, selector uji lama. Baris v2 yang batal: bagian 14.11.
+Paket kerja: final_packages_v3.json. Alasan keputusan: plan-v3.md bagian 13. Kriteria penerimaan: bagian 17. Rollout MySQL: bagian 18. Pertanyaan Randy: bagian 19.
+
+---
+
+## 14. KONTRAK FINAL v3 (satu-satunya antarmuka antar paket; menang atas bagian 7 dan plan.md 11.3)
+
+Berkas padanan: `final_contract_v3.txt`. Bagian plan.md 11.3 / `final_contract.txt` (v2) tetap berlaku HANYA untuk hal yang tidak disebut di sini (ProductBrowser, struktur CartItemNote dasar, LakasirPending, detektor scanner, partial cetak v1, API aditif `note`, selector uji lama). Baris v2 yang BATAL ada di 14.11.
+
+### 14.0 Invarian (berlaku untuk semua paket)
+
+- **R1 Urutan kunci (tidak boleh dibalik).** (1) baris `numbering_locks.name='sales'`; (2) baris `open_bills`; (3) baris `open_bill_items`; (4) baris `cart_items` milik kasir yang membayar; (5) baris `products` (StockGuard). Kode yang menomori (nomor penjualan, nomor bill, nama "(2)"), membuat penjualan, atau membayar bill: `NumberingLock::ensure()` (di luar transaksi) -> `DB::beginTransaction()` -> `NumberingLock::acquire()` sebagai PERNYATAAN PERTAMA -> sisanya. Edit baris biasa hanya (2)(3) dan tidak pernah memanggil `acquire()` setelah mengunci (2). Deadlock 1213 dan lock-wait 1205 diulang SATU kali; sesudahnya `SaleBusyException` (pesan "Sistem sedang sibuk, coba lagi"; API 503).
+- **R2 Satu momen.** Semua jalur penjualan memakai `$data['date'] = BusinessDay::normalize($data['date'] ?? null)` di `SellingService::create`; hari bisnis, nomor, nama kembar, kolom `date` diturunkan dari nilai itu.
+- **R3 Uang.** Semua pembulatan/perbandingan uang lewat `Money`; semua pembanding qty lewat `Money::qty*`.
+- **R4 Migrasi.** Aditif, idempoten per pernyataan (14.9), tanpa penulisan data selain baris kunci `sales` yang dibuat `NumberingLock::ensure()` (bukan migrasi).
+- **R5 Turun-ke-bawah.** Tabel `numbering_locks` tak ada -> kunci no-op + warning (perilaku produksi sekarang); tabel `open_bills` tak ada -> `billsVisible=false`; `AssignProduct` membuang `note` kosong.
+- **R6 Otorisasi.** Setiap method publik komponen bill: `abort_unless(OpenBillGate::canUse($user), 403)`; keputusan void/pembatalan dievaluasi di DALAM `mutate` terhadap baris terkunci.
+- **R7 Jejak.** Setiap mutasi bill menulis `open_bill_events` di transaksi yang sama (`OpenBillService::log`).
+- **R8 Sumber kebenaran.** DB; token/cache hanya pagar UX.
+
+### 14.1 Hari bisnis, kunci, penomoran, SellingService (paket `numbering`)
+
+```php
+// config/pos.php
+return [
+  'business_timezone'          => env('POS_BUSINESS_TIMEZONE', 'Asia/Jakarta'),
+  'stale_after_hours'          => 6,     // bill "Dari kemarin" hanya bila business_date < hari ini DAN umur > ini
+  'unsent_alert_minutes'       => 3,     // chip "Belum ke dapur" menjadi merah setelah ini
+  'cancel_sent_grace_minutes'  => 10,    // pembuat bill boleh membatalkan item terkirim sampai sekian menit sejak kiriman terakhir
+  'active_context_ttl_minutes' => 30,    // pemulihan bill aktif setelah reload
+];
+
+namespace App\Support;
+final class BusinessDay {
+  public static function timezone(): string;                       // config valid (timezone_identifiers_list) atau 'Asia/Jakarta'
+  public static function today(?\Carbon\CarbonInterface $now = null): string;   // 'Y-m-d' hari bisnis
+  /** UTC 'Y-m-d H:i:s'. null/''/tak terbaca = now(). Carbon = ->utc(). String tanpa zona = UTC. 'Z'/'+07:00' dihormati lalu ->utc(). 'Y-m-d' saja = 00:00:00 UTC. Mikrodetik dibuang. */
+  public static function normalize(\Carbon\CarbonInterface|string|null $moment): string;
+  public static function dateOf(\Carbon\CarbonInterface|string|null $moment): string;   // hari bisnis 'Y-m-d' dari normalize($moment)
+  public static function startUtc(string $businessDate): \Illuminate\Support\Carbon;
+  public static function endUtc(string $businessDate): \Illuminate\Support\Carbon;      // eksklusif
+  /** @return array{0:\Illuminate\Support\Carbon,1:\Illuminate\Support\Carbon} */
+  public static function range(?string $businessDate = null): array;
+  public static function scopeDay($query, string $column, string $businessDate);        // where col >= start and col < end; bind 'Y-m-d H:i:s' UTC
+  public static function label(string $businessDate, ?string $today = null): ?string;   // null bila hari ini; 'KEMARIN' bila kemarin; selain itu 'd/m'
+}
+
+namespace App\Services\Tenants;
+final class NumberingLock {
+  public const SALES = 'sales';
+  public static function available(): bool;     // Schema::hasTable('numbering_locks'); hanya hasil true di-cache per proses
+  public static function ensure(): void;        // di luar transaksi; SELECT biasa (autocommit); insertOrIgnore HANYA bila baris belum ada; positif di-cache per proses; tabel tak ada -> no-op + satu Log::warning
+  public static function acquire(): void;       // di dalam transaksi: DB::table('numbering_locks')->where('name','sales')->lockForUpdate()->first(); baris tak ada -> insertOrIgnore lalu select for update ulang; tabel tak ada -> no-op
+}
+final class DailyNumber {
+  /** Pemanggil memegang acquire(). max(sellings.daily_order_number di hari via BusinessDay::scopeDay('date')) ; bila null: max atas baris `date IS NULL` dengan scopeDay('created_at'); lalu max(open_bills.number di business_date) ; hasil = max(semua)+1. Pembacaan open_bills dalam try/catch + hasTable yang di-cache positif. */
+  public static function next(string $businessDate): int;
+}
+final class CustomerNameService {
+  public static function generateDailyCustomerName(?string $name, ?string $businessDate = null, ?int $excludeSellingId = null, ?int $excludeBillId = null): ?string;
+  // hitung "Nama" / "Nama (2)" dari sellings (scopeDay('date') + cadangan created_at untuk date null) DAN open_bills status open pada business_date; perilaku lama dikunci tes (mis. "Meja (5)") tidak berubah.
+}
+// app/Exceptions/SaleBusyException.php : final class SaleBusyException extends \RuntimeException { render($request): response (JSON 503 bila expectsJson) }
+
+class SellingService {
+  /**
+   * $hooks = [
+   *   'before'                     => ?Closure(): void,            // di dalam transaksi, sesudah acquire()
+   *   'after'                      => ?Closure(Selling): void,     // di dalam transaksi, sesudah SellingCreated & RecalculateEvent
+   *   'keep_customer_name'         => bool,                        // lewati penomoran "(2)"
+   *   'verify_stock'               => bool,                        // StockGuard::assert di dalam transaksi
+   *   'stock_override_product_ids' => int[],                       // produk yang boleh minus (override resmi)
+   * ]
+   */
+  public function create(array $data, array $hooks = []): Selling;
+  public function mapProductRequest(array $data): array;   // Money::round pada total_price/tax_price/money_changes; TIDAK memanggil Voucher::reduceUsed; menyimpan id voucher yang terpakai di $this->voucherToConsume
+}
+```
+Urutan `create()` (persis): (1) `$data['date']=BusinessDay::normalize(...)`; (2) `NumberingLock::ensure()`; (3) loop maks 2 percobaan: `DB::beginTransaction()`; (4) `NumberingLock::acquire()` PERNYATAAN PERTAMA; (5) `hooks['before']`; (6) `StockGuard::assert($data['products'], ['override'=>...])` bila `verify_stock`; (7) `$s = new Selling; $s->numberingLocked = true; $s->keepCustomerName = ...; $s->fill($data); $s->save();` (`Selling::creating`: `daily_order_number` kosong -> `DailyNumber::next(BusinessDay::dateOf($s->date))`; nama -> `CustomerNameService` kecuali `keepCustomerName`); (8) `SellingCreated::dispatch`; (9) `RecalculateEvent::dispatch`; (10) konsumsi voucher: `Voucher::whereKey($id)->where('kuota','>',0)->decrement('kuota')` harus mengubah 1 baris, kalau 0 -> `ValidationException` kunci `voucher` (rollback); (11) `hooks['after']($s)`; (12) `DB::commit()`. Pengecualian -> `rollBack`; `QueryException` errno 1213/1205 -> ulang satu kali, lalu `SaleBusyException`. `Selling` mendapat properti transien `public bool $numberingLocked = false; public bool $keepCustomerName = false;` (bukan kolom). `Selling::creating` tetap sebagai cadangan di luar `SellingService` (acquire hanya bila `DB::transactionLevel()>0` dan `!numberingLocked`). Lainnya: `SellingObserver::creating` -> `Selling::query()->count()`, laci kas null-aman -> `ValidationException` 'Cash drawer is not opened'; `VoucherService::applyable` -> `Carbon::parse(BusinessDay::today())`, `reduceUsed()` dihapus pemakainya tetapi method dibiarkan; `SellingOverview::getSalesToday` -> `BusinessDay::range()`; `AssignProduct` -> `if (blank($productRequest['note'] ?? null)) unset($productRequest['note'])`. `config/app.php` TIDAK diubah.
+
+### 14.2 Uang, total, stok, izin, jenis metode (paket `domain-support`)
+
+```php
+namespace App\Support;
+final class Money {
+  public static function round(float|int|string|null $v, int $scale = 2): float;
+  public static function parse(mixed $v): float;                 // floatval(preg_replace('/[^\d.]/','',(string)$v)) (perilaku Livewire lama)
+  public static function gte(float $a, float $b): bool;          // round(a,2) >= round(b,2)
+  public static function eq(float $a, float $b): bool;
+  public static function qty(float $v): float;                   // round 3 desimal
+  public static function qtyEq(float $a, float $b): bool;
+}
+namespace App\Services\Tenants;
+final class OrderTotals {
+  public static function lineTotal($line): float;               // priceUnit ? Money::round(priceUnit.selling_price*qty) : Money::round($line->price ?? 0)
+  public static function unitPrice($line): float;               // qty>0 ? Money::round(lineTotal/qty) : lineTotal
+  public static function unitIsExact($line): bool;              // Money::eq(unitPrice*qty, lineTotal)  (UI/cetak mengawali "~" bila false)
+  /** @return array{subtotal:float,line_discount:float,tax_price:float,header_discount:float,total_price:float,amount_due:float,qty:float,count:int}
+   *  tax_price = Money::round(subtotal*taxPercent/100); total_price = Money::round(subtotal+tax_price) (nilai yang disimpan di sellings.total_price);
+   *  amount_due = max(0, Money::round(total_price - line_discount - header_discount)) */
+  public static function compute(\Illuminate\Support\Collection $lines, float $taxPercent, float $headerDiscount = 0.0): array;
+}
+final class OrderLinePricing {
+  /** Baris BILL: qty naik -> oldPrice + (new-old)*currentUnitPrice; qty turun -> oldPrice/oldQty*newQty; hasil Money::round. Baris keranjang pribadi tetap perilaku lama (selling_price*qty). */
+  public static function repriceOnQtyChange(float $oldQty, float $oldPrice, float $newQty, float $currentUnitPrice): float;
+}
+final class PaymentPlanner {
+  /** @param array{payed_money?:mixed,member_id?:mixed,due_date?:mixed} $in
+   *  @return array{kind:string,payed_money:float,money_changes:float}
+   *  kredit DULU: member_id & due_date wajib; payed_money = clamp(Money::parse(in), 0, amountDue); money_changes=0.
+   *  exact: payed_money = amountDue; money_changes = 0 (angka klien diabaikan).
+   *  cash: payed_money = Money::parse(in) atau amountDue bila kosong/0; Money::gte(payed, amountDue) wajib; money_changes = Money::round(max(0, payed-amountDue)).
+   *  @throws \Illuminate\Validation\ValidationException kunci payed_money|member_id|due_date */
+  public static function plan(\App\Models\Tenants\PaymentMethod $method, float $amountDue, array $in): array;
+}
+final class StockGuard {
+  /** @param array<int,array{product_id:int,qty:float|int|string,price_unit_id?:int|null}> $lines
+   *  @param array{override?:int[]} $opts
+   *  Agregasi per produk (qty*priceUnit.stock untuk baris satuan-harga); Product::withTrashed()->whereIn()->lockForUpdate();
+   *  melewati is_non_stock/service dan produk di $opts['override']; aturan kurang = aturan CheckProductStock ($product->stock < kebutuhan).
+   *  Produk terhapus: pesan 'Product :name was deleted'; stok kurang: 'Stock of :name is not enough (left :left)'.
+   *  @throws \Illuminate\Validation\ValidationException kunci products.{index}.qty (kunci yang sama dengan API lama) */
+  public static function assert(array $lines, array $opts = []): void;
+}
+final class OpenBillGate {
+  public static function canUse(\App\Models\Tenants\User $u): bool;                       // $u->can('create selling')
+  public static function canVoid(\App\Models\Tenants\OpenBill $b, \App\Models\Tenants\User $u): bool;   // belum pernah dikirim: pembuat | update selling | delete selling ; sudah dikirim: canCancelSent
+  public static function canCancelSent(\App\Models\Tenants\OpenBill $b, \App\Models\Tenants\User $u): bool;   // delete selling | update selling | (b.created_by == u.id && b.kitchen_sent_at >= now - cancel_sent_grace_minutes)
+  public static function canOverrideStock(\App\Models\Tenants\User $u): bool;             // update selling (owner lolos via Gate::after)
+}
+// PaymentMethod::kind(): string  -> 'credit' bila is_credit; 'cash' bila is_cash && !is_wallet && !is_debit; selain itu 'exact'. Tidak pernah dari nama.
+// ReceivableService::create: total_receivable = Money::round($selling->total_price - $selling->discount_price - ($selling->total_discount_per_item ?? 0)); rest_receivable = Money::round(total_receivable - payed_money). (hanya piutang baru; tanpa penulisan ulang)
+// CheckProductStock: pesan 'Stock of :name is not enough (left :left)'; produk tak ditemukan 'The product is not found.' tetap; kunci validasi products.N.qty tetap.
+// OrderLineSorter: sort/group menerima CartItem|OpenBillItem|SellingDetail (duck-typed, tanpa query).
+// TransactionSellingStoreRequest::store memanggil create($data, ['verify_stock' => true]).
+```
+
+### 14.3 Skema DB persis (MySQL; semua `bigint unsigned` = `id()`/`foreignId`)
+
+Berkas migrasi dan urutan (nama berkas EKSAK):
+1. `2026_10_14_000001_add_pos_performance_indexes.php` (ditulis ulang, 14.9)
+2. `2026_10_15_000001_add_note_to_cart_items_and_selling_details_tables.php` (dikerjakan ulang memakai `SafeMigration`)
+3. `2026_10_15_000002_create_open_bills_table.php`
+4. `2026_10_15_000003_create_open_bill_items_table.php`
+5. `2026_10_15_000004_create_open_bill_events_table.php`
+6. `2026_10_15_000005_create_numbering_locks_table.php`
+7. `2026_10_15_000006_add_date_index_to_sellings_table.php`
+HAPUS: `2026_10_15_000002_add_listing_indexes_to_products_table.php`.
+
+```
+cart_items      ADD note varchar(255) NULL                         (tanpa AFTER)
+selling_details ADD note varchar(255) NULL
+
+open_bills                       ENGINE=InnoDB (utf8mb4 default koneksi)
+  id                    bigint unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY
+  number                int unsigned NOT NULL
+  business_date         date NOT NULL
+  status                varchar(12) NOT NULL DEFAULT 'open'          -- open|paid|void (BUKAN ENUM MySQL)
+  version               int unsigned NOT NULL DEFAULT 1
+  customer_name         varchar(255) NULL
+  table_id              bigint unsigned NULL   FK tables(id)  ON DELETE SET NULL
+  member_id             bigint unsigned NULL   FK members(id) ON DELETE SET NULL
+  note                  text NULL
+  tax_percent           decimal(6,3) NOT NULL DEFAULT 0.000         -- dibekukan saat bill dibuat
+  discount_price        double NOT NULL DEFAULT 0
+  kitchen_batch_count   smallint unsigned NOT NULL DEFAULT 0
+  last_kitchen_batch    mediumtext NULL                              -- JSON batch terakhir yang di-ACK (termasuk table_label)
+  pending_cancel        mediumtext NULL                              -- JSON [{ref,product_id,name,qty,note,price_unit_id,removed_by,removed_at,reason}] baris terkirim yang DIHAPUS
+  kitchen_sent_at       datetime NULL
+  created_by            bigint unsigned NULL   FK users(id) ON DELETE SET NULL
+  paid_by               bigint unsigned NULL   FK users(id) ON DELETE SET NULL
+  voided_by             bigint unsigned NULL   FK users(id) ON DELETE SET NULL
+  paid_at               datetime NULL
+  voided_at             datetime NULL
+  void_reason           varchar(255) NULL
+  selling_id            bigint unsigned NULL   FK sellings(id) ON DELETE SET NULL
+  created_at, updated_at timestamp NULL
+  UNIQUE open_bills_day_number_unique   (business_date, number)
+  INDEX  open_bills_status_day_index    (status, business_date)
+  UNIQUE open_bills_selling_id_unique   (selling_id)
+  FK     open_bills_table_id_foreign, open_bills_member_id_foreign, open_bills_created_by_foreign, open_bills_paid_by_foreign, open_bills_voided_by_foreign, open_bills_selling_id_foreign  (nama bawaan Laravel, semua <= 64)
+
+open_bill_items                  ENGINE=InnoDB
+  id                    bigint unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY
+  open_bill_id          bigint unsigned NOT NULL  FK open_bills(id) ON DELETE CASCADE
+  product_id            bigint unsigned NOT NULL  FK products(id)   (RESTRICT, sama dengan cart_items)
+  user_id               bigint unsigned NULL      FK users(id) ON DELETE SET NULL      -- siapa menambah
+  qty                   double NOT NULL
+  price                 double NULL                -- total baris sebelum diskon (semantik cart_items.price)
+  discount_price        double NULL
+  price_unit_id         bigint unsigned NULL      FK price_units(id) ON DELETE SET NULL
+  note                  varchar(255) NULL
+  sent_qty              double NOT NULL DEFAULT 0
+  sent_note             varchar(255) NULL
+  created_at, updated_at timestamp NULL
+  UNIQUE open_bill_items_bill_product_unique (open_bill_id, product_id)
+
+open_bill_events                 ENGINE=InnoDB  (append-only)
+  id                    bigint unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY
+  open_bill_id          bigint unsigned NOT NULL  FK open_bills(id) ON DELETE CASCADE
+  user_id               bigint unsigned NULL      FK users(id) ON DELETE SET NULL
+  action                varchar(24) NOT NULL      -- konstanta di OpenBillEvent: created, header, line_added, line_qty, line_removed, line_note, line_discount, sent, sent_manual, cancel_sent, void, paid, pay_with_unsent, stock_override, reprint
+  product_id            bigint unsigned NULL      -- tanpa FK (snapshot)
+  product_name          varchar(255) NULL
+  qty_from              double NULL
+  qty_to                double NULL
+  reason                varchar(255) NULL
+  detail                text NULL                 -- JSON kecil
+  created_at            timestamp NULL
+  INDEX open_bill_events_bill_index (open_bill_id, id)
+
+numbering_locks                  ENGINE=InnoDB
+  name                  varchar(32) NOT NULL PRIMARY KEY            -- satu baris: 'sales' (dibuat NumberingLock::ensure(), bukan migrasi)
+
+sellings (ALTER, opsional, boleh dilewati)
+  INDEX sellings_date_number_index (date, daily_order_number)
+```
+Ukuran kunci (utf8mb4): `open_bills_status_day_index` = 12*4+2+3 = 53 B; `open_bills_day_number_unique` 7 B; `open_bill_items_bill_product_unique` 16 B; `open_bill_events_bill_index` 16 B; PK `numbering_locks` 32*4+2 = 130 B; `sellings_date_number_index` ~ 8+4 B. Semua << 3072 B. Nama indeks terpanjang 35 karakter (<= 64). Tipe FK cocok dengan induk `id()` (bigint unsigned).
+
+### 14.4 Model
+
+```php
+namespace App\Enums; enum OpenBillStatus: string { case Open='open'; case Paid='paid'; case Void='void'; }
+namespace App\Models\Tenants;
+class OpenBill extends Model {   // guarded ['id']; casts: status=OpenBillStatus, business_date='date:Y-m-d', tax_percent='float', discount_price='float', pending_cancel='array', last_kitchen_batch='array', paid_at/voided_at/kitchen_sent_at='datetime'
+  items(): HasMany; events(): HasMany; table(); member(); creator(); payer(); voider(); selling();
+  scopeOpen($q); label(): string (customer_name ?: "Meja {table.number}" ?: "Bill #".str_pad(number,3,'0',STR_PAD_LEFT)); formattedNumber(): string ("Order #012");
+}
+class OpenBillItem extends Model { /* guarded ['id']; HasOrderLine; casts qty/price/discount_price/sent_qty float; bill(); product() (withTrashed); priceUnit(); */ }
+class OpenBillEvent extends Model {   // guarded ['id']; const UPDATED_AT = null; casts detail array; konstanta action (lihat skema); public static function record(OpenBill $b, string $action, ?User $by, array $attrs = []): self
+}
+```
+
+### 14.5 OpenBillService, presenter, pengecualian (paket `open-bill-backend`)
+
+Pengecualian di `App\Exceptions\OpenBill\`: `BillConflictException` (versi berubah; property `public int $serverVersion`), `BillClosedException` (bukan open), `BillEmptyException`, `BillForbiddenException` (gate), `BillReasonRequiredException`. Semua `extends \DomainException` dengan pesan sudah diterjemahkan. `App\Services\Tenants\PayResult` = `final class PayResult { public function __construct(public Selling $selling, public bool $alreadyPaid = false, public ?array $kitchen = null) {} }`.
+
+```php
+namespace App\Services\Tenants;
+final class OpenBillService {
+  public function __construct(private SellingService $sellingService) {}
+
+  public function createFromCart(User $by, array $header): OpenBill;
+  //  $header: customer_name?, table_id?, member_id?, note?, discount_price?  (R1: ensure -> tx -> acquire -> number=DailyNumber::next(BusinessDay::today()) -> nama final via CustomerNameService (menghitung bill open) -> tax_percent = Setting default_tax -> create
+  //  -> pindahkan CartItem::cashier() milik $by (gabung product_id ganda: jumlah qty & price) ke open_bill_items, hapus keranjang pribadi -> event 'created'. Kosong -> BillEmptyException. SQLSTATE 23000 pada (business_date, number) -> ulang 1x.
+  public function find(int $id): OpenBill;                        // items.product (withTrashed) + items.product.category + items.priceUnit + table + member + creator
+  /** tx + lockForUpdate bill + status open (else BillClosedException; paid -> BillClosedException) + $fn($lockedBill) + version++ ; opts: ['sales_lock'=>bool]: true -> ensure, tx, acquire() DULU lalu kunci bill (R1) */
+  public function mutate(int $billId, \Closure $fn, array $opts = []): mixed;
+  public function log(OpenBill $bill, string $action, ?User $by, array $attrs = []): void;     // tulis OpenBillEvent (dipanggil di dalam mutate)
+
+  // --- baris (hanya kunci (2)(3); tanpa expectedVersion) ---
+  public function addLine(int $billId, Product $product, float $qty, ?int $priceUnitId, ?string $note, User $by): OpenBillItem;
+  //   qty = selisih yang ditambahkan; baris sudah ada -> qty+=; harga lewat OrderLinePricing; bila pending_cancel punya entri untuk produk itu -> sent_qty := entri.qty, sent_note := entri.note, entri dibuang (netting); StockGuard TIDAK dipanggil di sini (validasi cepat tetap di CartInteraction::validateStock).
+  public function setLineQty(int $billId, int $itemId, float $qty, User $by, ?string $reason = null): ?OpenBillItem;
+  //   qty <= 0 -> hapus; qty < sent_qty (Money::qtyEq/<): butuh OpenBillGate::canCancelSent(locked bill) else BillForbiddenException, dan $reason wajib (BillReasonRequiredException); sent_qty TIDAK diturunkan (BATAL diturunkan dari selisih); hapus baris terkirim -> entri pending_cancel (ref unik 8 hex) + event 'line_removed'; reduksi -> event 'cancel_sent'.
+  public function setLineNote(int $billId, int $itemId, ?string $note, User $by): void;
+  public function setLineDiscount(int $billId, int $itemId, ?float $discount, User $by): void;
+  public function restoreLine(int $billId, array $snapshot, User $by): void;      // untuk Undo (lewat addLine)
+
+  // --- header ---
+  public function updateHeader(OpenBill $bill, array $header, int $expectedVersion, User $by): OpenBill;
+  //   expectedVersion wajib (BillConflictException); bila customer_name berubah -> mutate(sales_lock:true) dan nama dihitung ulang (exclude bill ini); table_id/note/member/discount tanpa kunci penjualan; event 'header'.
+
+  // --- dapur (dua fase) ---
+  /** MURNI (tanpa tulis). null bila tidak ada selisih. */
+  public function kitchenBatch(OpenBill $bill): ?array;
+  //   array{ batch_no:int(kitchen_batch_count+1), kind:'new'|'addition'|'cancel_only'|'change_only',
+  //          items:list<{item_id,product_id,name,qty(selisih),total_qty,note,category,category_id}>,
+  //          cancelled:list<{ref,source:'reduce'|'removed',item_id:?int,product_id,name,qty,note}>,
+  //          changed:list<{item_id,product_id,name,note,was}>, moved:?{from:?string,to:?string}, table_label:?string, pending_count:int,
+  //          ack:{bill_id,batch_no,items:list<{item_id,to_qty,to_note}>,cancel_refs:list<string>,table_label:?string} }
+  //   ack.items memuat SEMUA baris yang sent_qty/sent_note-nya akan berubah: baris tambahan (to_qty=qty), baris dengan reduksi (to_qty=qty sekarang) dan baris changed (to_note); entri pending_cancel yang dicetak masuk ack.cancel_refs.
+  //   selisih: delta = Money::qty(qty - sent_qty) > 0 -> items; qty < sent_qty -> cancelled(reduce, ref "r{item_id}", qty = sent_qty-qty); catatan beda (null == '') dengan qty == sent_qty -> changed; pending_cancel -> cancelled(removed); moved bila kitchen_batch_count>0 && label meja sekarang != last_kitchen_batch.table_label
+  public function pendingCount(OpenBill $bill): int;                              // items + cancelled + changed + (moved?1:0); 0 bila kitchen_batch_count==0 && tak ada item
+  public function ackKitchenBatch(int $billId, array $ack, User $by, string $mode = 'printed'): OpenBill;
+  //   mutate; idempoten: ack.batch_no <= kitchen_batch_count -> kembalikan tanpa ubah; batch_no > count+1 -> BillConflictException; selain itu set sent_qty/sent_note per ack.items, buang pending_cancel yang ref-nya di ack.cancel_refs, kitchen_batch_count=batch_no, last_kitchen_batch=payload ringkas (termasuk table_label), kitchen_sent_at=now, event 'sent' ($mode 'manual' -> 'sent_manual').
+  public function lastKitchenBatch(OpenBill $bill): ?array;                       // last_kitchen_batch untuk "Cetak ulang tiket terakhir"
+
+  // --- void ---
+  /** reason wajib (min 3 karakter, maks 255). Gate dievaluasi pada baris terkunci. Mengembalikan payload tiket void (semua baris sent_qty>0 sebagai cancelled + reason) atau null bila tak pernah terkirim. Baris TETAP disimpan. */
+  public function void(OpenBill $bill, User $by, string $reason, int $expectedVersion): ?array;
+
+  // --- bayar ---
+  public function pay(OpenBill $bill, array $payment, int $expectedVersion, User $by, array $opts = []): PayResult;
+  //   $payment HANYA: payment_method_id, payed_money, member_id, due_date, voucher. $opts: ['stock_override'=>bool]. $by harus == auth()->user() (observer memakai auth()).
+  //   (1) bill sudah paid dengan selling_id -> PayResult(alreadyPaid:true) tanpa efek lain. (2) pre-cek di luar transaksi: status, versi, item tidak kosong, metode ada (else ValidationException payment_method_id), laci kas bila cash_drawer_enabled (ValidationException 'Cash drawer is not opened').
+  //   (3) $date = BusinessDay::normalize(null); $sameDay = bill.business_date === BusinessDay::dateOf($date). (4) products[] dari baris (product_id, qty, price, discount_price, price_unit_id, note); tax = bill.tax_percent; discount_price = bill.discount_price; friend_price=false; amount_due = OrderTotals; PaymentPlanner::plan(...); mapProductRequest.
+  //   (5) SellingService::create($data + ['date'=>$date] + ($sameDay ? ['daily_order_number'=>bill.number] : []), hooks): before = baca ulang bill FOR UPDATE (status open, versi == expected, tanda tangan baris sama dengan saat dibangun, laci kas) ; after = bill.status=paid, paid_by, paid_at, selling_id, version++, event 'paid' (+ 'pay_with_unsent' bila pendingCount>0) (+ 'stock_override'); 'keep_customer_name'=>$sameDay; 'verify_stock'=>true; 'stock_override_product_ids' = produk baris sent_qty>0 hanya bila opts.stock_override && OpenBillGate::canOverrideStock($by).
+  //   TANPA transaksi luar. Mengembalikan PayResult dengan ->kitchen = null.
+  public function totals(OpenBill $bill): array;                                 // OrderTotals::compute(items, bill.tax_percent, bill.discount_price)
+  /** 3 query konstan (bill+relasi, item+produk+kategori+satuan, count) */
+  public function listOpen(User $viewer, ?int $createdBy = null): \Illuminate\Support\Collection;
+  public function printPayload(OpenBill $bill, string $mode, ?array $batch = null, bool $reprint = false, ?User $by = null): array;   // 'bill'|'kitchen'
+}
+final class OpenBillPresenter {
+  public static function payload(OpenBill $bill, string $mode, ?array $batch, bool $reprint, ?User $by): array;
+  //  Bentuk Selling + : id (bill id), job_key ('k{id}-{batch_no}' | 'b{id}-v{version}' | '{mode}{id}-r' bila reprint), daily_order_number, formatted_daily_order_number, number_label ('#012'), business_date_label (null bila hari ini; 'KEMARIN'/'d/m'), customer_name, table{number}, member, note, note_plain, user{name}, created_at_label, printed_at_label (zona bisnis), subtotal, tax, tax_price, discount_price, total_discount_per_item, amount_due, selling_details[{qty,price(total baris),discount_price,note,product{id,sku,name,category{id,name}|null}}] (mode kitchen: hanya baris batch dengan qty=selisih dan total_qty), kitchen{kind,batch_no,reprint,cancelled[],changed[],moved,table_label,void_reason|null,is_void}, price_stale (per baris) 
+  public static function row(OpenBill $bill, array $totals, User $viewer, bool $kitchenEnabled): array;
+  //  id, number, number_label, business_date_label, label, table_label, customer_name, creator_name, items_count, qty_total, amount_due, age_minutes, stale (aturan DA/KUX-I10), crossed_midnight (business_date<today && !stale), sent (kitchen_batch_count>0), unsent (kitchenEnabled && (kitchen_batch_count==0 || pendingCount>0)), unsent_count, unsent_age_minutes (dari updated_at), version, can_void, can_cancel_sent
+}
+```
+
+### 14.6 Komponen `Cashier` dan `CartInteraction` (paket `cashier-livewire`)
+
+Kontrak plan.md 11.3 tetap untuk draft pesanan baru (`CashierDraftService`: hanya pesanan BARU yang belum disimpan), `commitCustomerName`, `restoreCartItem`, `selectTable`, `saveCustomTable`, `storeCart`, `resetOrder`, `getViewData`. Tambahan/perubahan:
+
+```php
+#[Locked] public ?int $openBillId = null;        // null = keranjang pribadi "Order baru"
+#[Locked] public ?int $openBillVersion = null;
+#[Locked] public bool $paymentPinned = false;    // true selama modal bayar terbuka: syncBill() no-op
+public ?array $openBill = null;                  // id, number, number_label, label, version, sent(bool), batches(int), stale(bool), items_count, pending_count
+public string $paymentToken = '';
+public bool $billsEnabled = true;                // Setting open_bill_enabled (bawaan true) -> hanya mengatur PEMBUATAN (Simpan/Kirim)
+public bool $billsVisible = true;                // tabel open_bills ada && (billsEnabled || jumlah bill open > 0)
+public bool $kitchenEnabled = false;             // About business_type == 'fnb'
+public bool $printKitchenOnPay = true;           // saklar modal bayar (diatur $wire.set)
+public bool $stockOverride = false;              // konfirmasi override stok (diatur $wire.set), hanya efektif bila gate
+public ?array $kitchenPreview = null;            // {pending:int} untuk modal bayar fnb konteks bill
+
+public function openBill(int $billId): void                       // hanya status open; gate; muat header ke cartDetail; konteks bill; refreshCart; OpenBillContext::remember; dispatch 'open-bill-changed'
+public function leaveBill(): void                                 // label "Kembali ke order baru"; restoreDraft
+public function saveBill(): void                                  // konteks pribadi: createFromCart -> RESET ke order baru -> dispatch 'bill-saved' {id,number,label,sent:false}; BillEmptyException -> notifikasi "Add the bill first"; keranjang kosong karena respons hilang -> "Bill may already exist, check the bills list"
+public function sendToKitchen(?int $billId = null, bool $takeaway = false): void
+//   fnb tanpa meja & tanpa nama & !$takeaway (konteks pribadi atau bill) -> dispatch 'takeaway-prompt' dan berhenti; konteks pribadi -> createFromCart; kitchenBatch (murni); null -> notifikasi 'Nothing new to send' + tombol cetak ulang; selain itu dispatch 'bill-print' {mode:'kitchen', bill, reprint:false, ack, job_key} ; kemudian RESET ke order baru + 'bill-saved' {sent:true}.
+#[On('kitchen-ack')] public function ackKitchen(array $ack, string $mode = 'printed'): void   // OpenBillService::ackKitchenBatch; dispatch 'open-bills-changed'
+public function printProvisional(?int $billId = null): void       // dispatch 'bill-print' mode 'bill'
+public function reprintKitchen(?int $billId = null): void         // HANYA last_kitchen_batch, reprint=true, tanpa ack, event 'reprint'
+public function cancelSent(int $itemId, float $newQty, string $reason): void   // setLineQty dengan gate+reason
+public function voidBill(string $reason, ?int $billId = null): void
+#[On('open-bill-selected')] public function onOpenBillSelected(int $id): void
+#[On('open-bill-pay')] public function onOpenBillPay(int $id): void           // openBill + syncCartForPayment + open-modal proceed-the-payment
+#[On('open-bill-changed')] public function onBillChildChanged(int $id): void  // anak (CartItemNote/PriceSetting) -> muat ulang: BACA VERSI DULU, baris sesudahnya
+public function syncCartForPayment(): void        // PIN versi (versi dibaca dulu), paymentToken=uuid, paymentPinned=true, kitchenPreview
+public function paymentClosed(): void             // paymentPinned=false (dipanggil dari penutupan modal)
+public function syncBill(): void                  // wire:poll.20s.visible; no-op bila !bill atau paymentPinned; memuat ulang hanya bila versi DB != openBillVersion; JANGAN menimpa input kotor (klien menunda)
+public function proceedThePayment(SellingService $sellingService): void   // TANDA TANGAN TETAP
+```
+`proceedThePayment` (kedua jalur): (a) muat baris; (b) `friend_price=false`; (c) `$method = PaymentMethod::find(...)` (jalur bill: tidak ada -> ValidationException; jalur langsung: fallback Cash lama); (d) `PaymentPlanner::plan($method, amount_due, [...])` — GANTI cabang `wallet||debit||!is_cash` lama; (e) validator sisanya (kredit: member, due_date); (f) jalur bill: `OpenBillService::pay(bill, payment, openBillVersion, user, ['stock_override'=>...])`; jalur langsung: `SellingService::create($data, ['verify_stock'=>true, 'before' => kunci baris keranjang + cocokkan tanda tangan (id,qty,price,discount_price,note) yang dibaca di (a) atau `CartChangedException`, 'after' => `CartItem::cashier()->delete()`])` DI DALAM transaksi; (g) token (PAY-C3): validasi dulu; `Cache::has("paydone:{u}:{t}")` -> buka modal sukses penjualan itu, selesai; `Cache::add("paylock:{u}:{t}",1,30)` gagal -> return; `finally Cache::forget("paylock:..")`; sukses -> `Cache::put("paydone:{u}:{t}", selling_id, 600)`; kegagalan apa pun -> `paymentToken = Str::uuid()`; (h) pesan `ValidationException` sampai ke modal (`@error`); `BillConflictException` -> notifikasi + browser `bill-conflict {id, serverVersion, label, amount_due}`; `SaleBusyException`/`CartChangedException` -> notifikasi. Sukses jalur bill dengan `printKitchenOnPay && pending>0`: hitung `kitchenBatch` SEBELUM pay, setelah sukses dispatch `bill-print` dapur (tanpa ack) lalu `selling-created`. `calculateTotalPrice()` memakai `OrderTotals::compute` (+ diskon header `cartDetail['discount_price']`), pajak = `bill.tax_percent` pada konteks bill, selain itu `Setting default_tax`. Cek laci kas di awal (pesan, bukan 500).
+
+`CartInteraction` (aditif; `POS` dan `Pages/CartItem` tidak berubah): `protected function activeBillId(): ?int` (default null), `lineModel()`, `lineQuery()`, `withLineLock()` untuk konteks pribadi; pada konteks bill `addCart/reduceCart/deleteCart/addDiscountPricePerItem/restoreCartItem` MENDELEGASIKAN ke `OpenBillService::addLine/setLineQty/setLineDiscount/restoreLine` (tidak menyentuh `cart_items`). Reduksi di bawah `sent_qty` atau hapus baris terkirim tidak langsung; stepper "-" pada `qty == sent_qty` memanggil dialog; hanya `cancelSent(itemId,newQty,reason)` yang mengurangi. `cart-item-removed` membawa `undoable` (true juga untuk baris terkirim). Voucher memakai `BusinessDay::today()`.
+
+`OpenBillContext` (`App\Services\Tenants\OpenBillContext`): `remember(int $userId, int $billId)`, `recall(int $userId): ?int`, `forget(int $userId)`; cache `cashier-open-bill:{userId}` TTL `pos.active_context_ttl_minutes`; `mount()` memulihkan hanya bila bill masih `open`. `PriceSetting`: `public Model $cartItem` + `authorizeLine()`; setelah ubah diskon dispatch `open-bill-changed` bila konteks bill. `CartItemNote`: `#[Locked] string $context ('cart'|'bill')`, `#[Locked] ?int $billId`; konteks bill -> `OpenBillService::setLineNote`; sesudah simpan dispatch `open-bill-changed {id}`. `ProductBrowser`: render menambah `committed` (map product_id -> SUM(open_bill_items.qty) bill open, satu query ber-`whereIn` produk yang tampil; dalam try/catch + hasTable cache positif) agar kartu menampilkan "Tersisa N setelah bill terbuka".
+`App\Exceptions\CartChangedException extends \DomainException`.
+
+### 14.7 Komponen `OpenBills` (paket `open-bills-component`)
+
+```php
+namespace App\Livewire\Cashier;
+class OpenBills extends Component {
+  public bool $open = false; public string $filter = 'all';   // all|mine|unsent|stale
+  public string $search = '';
+  public function mount(): void;                    // abort_unless canUse; hitung count + unsent_count (query ber-indeks)
+  public function setOpen(bool $open): void;        // daftar hanya dimuat saat $open
+  public function setFilter(string $filter): void;
+  #[On('open-bills-changed')] public function refresh(): void;
+  public function select(int $billId): void;        // dispatch('open-bill-selected', id:)->to(Cashier::class); tutup
+  public function pay(int $billId): void;           // dispatch('open-bill-pay', id:)->to(Cashier::class); tutup
+  public function printProvisional(int $billId): void;   // browser 'bill-print' mode bill
+  public function reprintKitchen(int $billId): void;     // browser 'bill-print' kitchen reprint (last_kitchen_batch)
+  public function previewBill(int $billId, string $mode): void;    // browser 'bill-preview'
+  public function voidBill(int $billId, string $reason, int $expectedVersion): void;
+  public function render();                          // view('livewire.cashier.open-bills', ['bills'=>rows terfilter/dicari, 'count'=>int, 'unsentCount'=>int, 'today'=>string])
+}
+```
+Setiap method: `OpenBillGate::canUse` (403), termasuk jalur render yang dipakai `wire:poll`. Pencarian: nomor, nama, meja (server, setelah `listOpen`, tanpa query tambahan). Urutan: unsent dulu, lalu `business_date, number`.
+
+### 14.8 Event, JS, tata letak cetak
+
+Browser (server -> klien): `bill-print {mode:'bill'|'kitchen', bill:object, reprint:bool, ack:?object, job_key:string}`, `bill-preview {mode, bill}`, `bill-saved {id,number,label,sent:bool}`, `open-bill-changed {id,number,version}`, `bill-conflict {id,serverVersion,label,amount_due}`, `takeaway-prompt {number}`, `cart-item-removed {...,undoable:bool}`, `selling-created`, `order-reset`, serta event plan.md 11.3. Livewire: `open-bill-selected {id}`, `open-bill-pay {id}`, `open-bills-changed`, `kitchen-ack {ack,mode}`, `product-scanned`, `products-refresh`. Klien (partial -> bootstrap): `lakasir-print-failed {mode, jobKey, payload, ack, reason}` (bootstrap menampilkan toast permanen [Coba lagi] [Tandai terkirim tanpa cetak untuk dapur]).
+
+`window.LakasirReceipt` (`version: 2`; method v1 TETAP):
+```js
+print(payload, opts?: {buttonId?:string, reprint?:boolean, mode?:'receipt'|'bill'|'kitchen', showPrices?:boolean, jobKey?:string}): Promise<boolean>
+//  ANTREAN serial (satu rantai Promise); sebelum tiap pekerjaan menunggu window._lakasirIsPrintingNow bersih (maks 8 dtk, cek 100 ms); tidak pernah menjatuhkan pekerjaan.
+//  pagar ganda: peta jobKey -> Promise selama 3 dtk; kunci = opts.jobKey ?? `${mode}:${payload.id ?? payload.daily_order_number}`; pemanggilan kedua dengan kunci sama mengembalikan Promise yang sama.
+//  resolve(false) pada kegagalan (printer tak ada/ditolak/timeout) + window.dispatchEvent('lakasir-print-failed'); resolve(true) HANYA bila Printer.print() benar-benar dijalankan tanpa exception.
+build(printer, payload, opts?: {mode?, reprint?, printerData?, showPrices?}): Printer     // murni
+preview(payload, opts?): string                                                          // via TextPrinter (32/48 kolom), sama persis dengan build()
+groupDetails, htmlToPlain, toPrintable, wrapText, itemName                                // tetap
+```
+Tata letak (kolom W = 32 (58 mm) / 48 (80 mm)); `~` bila `unit*qty != total`:
+```
+ITEM (receipt, bill)        Nasi Goreng Spesial            <- nama dibungkus
+                            2 x 25.000           50.000     <- kiri qty x satuan ("2 x ~3.333,33" bila tak pas), kanan total; ditumpuk bila kiri+kanan > W
+                              Diskon (2.000)
+                              > pedas, tanpa telur
+BILL SEMENTARA              judul 'BILL SEMENTARA' + 'BELUM DIBAYAR'; Order #nomor (+ label tanggal bila bukan hari ini); Subtotal / Pajak / Diskon / TOTAL (amount_due); penutup 'BUKAN BUKTI PEMBAYARAN'; tanpa baris bayar/kembali
+TIKET DAPUR                 [SALINAN bila reprint]  (atas dan bawah)
+                            baris besar (size(1,1) bold, maks 16 kolom efektif): 'MEJA 12' atau 'BAWA PULANG #012' atau nama
+                            'DAPUR - PESANAN BARU' | 'DAPUR - TAMBAHAN - KIRIMAN KE-2' | 'DAPUR - PEMBATALAN' | 'DAPUR - BILL DIBATALKAN' (+ alasan)
+                            Order #012  Pelanggan  Kasir  Jam (printed_at_label)  [Tgl bila bukan hari ini]
+                            'PINDAH: meja 4 -> 6' (bold) bila kitchen.moved
+                            per kategori: '2 x Es Teh Manis' size(0,1)+bold, '(total 3)' bila total_qty != qty, '  > catatan'
+                            'BATAL:' (bold)  '1 x Soto'     'UBAH CATATAN:' 'Nasi Goreng: pedas -> tidak pedas'     catatan pesanan
+                            penutup 'Kiriman ke-2'; tanpa harga kecuali opts.showPrices ?? cfg.kitchenShowPrices
+                            SELALU diakhiri size(0,0), style('normal'), align('left') sebelum cut()
+```
+Konfigurasi `LakasirReceiptConfig` tambahan: `kitchenShowPrices` (Setting `kitchen_ticket_show_price`, bawaan false) dan label (semua via `__()` kunci bagian 15): bill, provisional, notPaid, notProof, kitchen, newOrder, addition, additionN, cancelled, cancelOnly, voided, changed, changedNote, moved, takeaway, tableWord, billNo, itemDiscount, copy, shipmentN, totalN. Tanpa `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write`.
+
+Bootstrap (`cashier-shell`): pendengar `bill-print` -> `const ok = await LakasirReceipt.print(d.bill,{mode:d.mode,reprint:d.reprint,jobKey:d.job_key}); if (ok && d.ack) Livewire.dispatch('kitchen-ack',{ack:d.ack,mode:'printed'})`; `lakasir-print-failed` -> toast permanen; `bill-preview` -> modal `receipt-preview-modal` isi `<pre id=receipt-preview-text>` dari `LakasirReceipt.preview`; `bill-saved` -> toast >= 8 dtk dengan aksi [Bayar] [Buka] (dan [Kirim ke dapur] bila `sent:false` di fnb).
+
+### 14.9 Migrasi, `SafeMigration`, `pos:preflight` (paket `data-layer`)
+
+```php
+namespace App\Support;
+final class SafeMigration {
+  public static function isSqlite(): bool;
+  public static function lockTimeout(int $seconds = 10): void;                       // hanya mysql/mariadb: SET SESSION lock_wait_timeout = N
+  public static function retryOnLock(\Closure $fn, int $attempts = 3, int $sleepSeconds = 3): mixed;   // ulang pada errno 1205/1213
+  public static function addColumn(string $table, string $column, \Closure $define): void;   // hasColumn guard + lockTimeout + retryOnLock; $define(Blueprint)
+  public static function index(string $table, array|string $columns, string $name): void;    // Schema::hasIndex guard + lockTimeout + retry
+  public static function unique(string $table, array|string $columns, string $name): void;
+  public static function foreign(string $table, string $column, string $refTable, string $onDelete = 'set null', string $refColumn = 'id'): void;  // non-sqlite: Schema::getForeignKeys guard menurut kolom; sqlite: no-op
+  public static function dropIndexIfExists(string $table, string $name): void;
+  public static function hasOtherIndexLeading(string $table, string $column, string $exceptIndex): bool;
+}
+```
+Pola WAJIB berkas pembuat tabel: `if (! Schema::hasTable(T)) { Schema::create(T, fn => $t->engine='InnoDB'; kolom saja + (bila sqlite) FK inline); }` lalu SELALU `SafeMigration::unique/index/foreign(...)` satu per satu (idempoten; memperbaiki keadaan setengah jadi). `down()` = `Schema::dropIfExists` dengan komentar "dev saja". Migrasi perf: `up()` -> `SafeMigration::index()` empat kali dengan NAMA YANG SAMA (`stocks_pos_lookup_index`, `cart_items_user_product_index`, `products_pos_listing_index`, `products_sku_index`); `down()` -> untuk `stocks` dan `cart_items`: bila `!hasOtherIndexLeading(table, 'product_id'|'user_id', komposit)` buat dulu `stocks_product_id_index` / `cart_items_user_id_index`, baru `dropIndexIfExists`; products langsung. Migrasi `000001` dan `000006` memakai `addColumn`/`index` (timeout + retry).
+
+`php artisan pos:preflight [--pre]` (`App\Console\Commands\PosPreflight`, BACA-SAJA, tidak menulis, exit 0/1):
+- `--pre` (SEBELUM migrasi): cetak fakta (DB name, `VERSION()`, `@@system_time_zone`, `@@global.time_zone`, `@@transaction_isolation`, `@@innodb_lock_wait_timeout`, `@@innodb_default_row_format`, `@@sql_mode`, jumlah baris `sellings`/`selling_details`, `CACHE_DRIVER`, engine/row_format tabel yang tidak InnoDB/Dynamic); wajib ada tabel `users, products, stocks, sellings, selling_details, cart_items, migrations`; hitung migrasi PENDING (berkas di `database/migrations` yang tidak ada di tabel `migrations`): HARUS subset dari tujuh berkas yang diizinkan (`2026_10_14_000001` dan `2026_10_15_000001`..`2026_10_15_000006`; yang sudah Ran tidak dihitung); selain itu FAIL dan daftar migrasi tak diizinkan dicetak ("JANGAN jalankan migrate"). Migrasi apa pun SEBELUM `2026_10_15_000001` yang berstatus Pending selain `2026_10_14_000001` = FAIL.
+- tanpa `--pre` (SESUDAH): semua tujuh berkas berstatus Ran (000006 hanya WARN bila hilang); tabel/kolom/indeks/FK ada (`hasTable/hasColumn/hasIndex/getForeignKeys`); tabel baru InnoDB; `sellings_date_number_index` hanya WARN bila hilang; kolom `note` ada.
+
+### 14.10 Selector uji (data-testid)
+
+Dari bagian 7.8 plus: `save-bill-only`, `send-kitchen`, `provisional-bill`, `takeaway-prompt`, `takeaway-confirm`, `bill-saved-toast`, `kitchen-print-failed`, `kitchen-print-retry`, `kitchen-mark-sent`, `kitchen-pending-strip`, `line-chip-{id}`, `cancel-sent-dialog`, `cancel-reason`, `cancel-confirm`, `bill-resume-chip`, `bills-search`, `bills-filter-unsent`, `bills-unsent-dot`, `bill-unsent-chip-{id}`, `bill-menu-{id}`, `pay-kitchen-switch`, `pay-stock-override`, `pay-conflict`, `pay-price-stale`.
+
+### 14.11 Baris v2/v3-awal yang BATAL
+
+- `final_contract.txt`: "SellingService::create(array $data): ... Cache::lock('selling-numbering'...)" (BATAL; 14.1); migrasi `2026_10_15_000002_add_listing_indexes_to_products_table` dan indeks `products_category_listing_index`/`products_show_name_index` (BATAL; berkas dihapus); `Selling::creating dan CustomerNameService TIDAK diubah` (BATAL; keduanya memakai BusinessDay).
+- plan-v3 7.1 `NumberingLock::ensure(string $date)`/`acquire(string $date)` per hari (BATAL; satu kunci `sales`), `DailyNumber` fallback `OR` (BATAL), 7.3 `OpenBillService` lama dengan `registerCancellation`, `kitchenBatch` yang menulis, `void(?string $reason)`, `pay(...): Selling` (BATAL; 14.5), 7.4 `saveBill` "konteks pindah ke bill baru", `reprintKitchen(bool $all)`, `onOpenBillPay`, "konteks bill TIDAK dipulihkan" (BATAL; 14.6), 7.5 filter `all|mine|stale` (BATAL; `all|mine|unsent|stale`), 7.6 kunci anti-ganda `mode:id` yang menjatuhkan pekerjaan (BATAL; antrean), 7.7 sebagian kunci terjemahan (diganti bagian 15), 6.4-6.5 daftar rilis (diganti bagian 18), 9 paket (diganti bagian 16).
+
+---
+
+## 15. Tabel terjemahan SEMUA string UI baru (EN kunci -> ID); satu pemilik `cashier-shell` (`lang/id.json`, `lang/en.json`; `en.json`: nilai = kunci)
+
+Aturan: kunci yang SUDAH ada di `lang/id.json` mempertahankan nilainya kecuali tercantum di sini (tabel ini menang). `:name`, `:n`, dst. adalah placeholder Laravel. Paket lain TIDAK mengedit `lang/*`; kunci yang kurang dilaporkan ke `cashier-shell`. `LangKeysTest` memindai `__('...')` pada view dan kelas PHP baru. Kosakata: "Bill" (objek), "Bill sementara" (cetak), tidak ada kata "Bon". Tabel menggantikan 7.7.
+
+### 15.1 Bill, dapur, daftar
+
+| EN (kunci) | ID |
+|---|---|
+| Open bills | Bill terbuka |
+| Bills | Bill |
+| Save bill | Simpan bill |
+| Save only | Simpan saja |
+| Send to kitchen | Kirim ke dapur |
+| Save and print ticket | simpan + cetak tiket |
+| Provisional bill | Bill sementara |
+| Bill saved | Bill tersimpan |
+| Bill #:number | Bill #:number |
+| Bill #:number (:label) saved | Bill #:number (:label) tersimpan |
+| Bill #:number saved. NOT sent to the kitchen yet. | Bill #:number disimpan. BELUM dikirim ke dapur. |
+| New order | Order baru |
+| Unsaved order | Order baru (belum disimpan) |
+| Back to new order | Kembali ke order baru |
+| Resuming Bill #:number (:label) | Melanjutkan Bill #:number (:label) |
+| Open this bill | Buka bill ini |
+| Open | Buka |
+| Void bill | Batalkan bill |
+| Void reason | Alasan pembatalan |
+| Bill voided | Bill dibatalkan |
+| A reason is required | Alasan wajib diisi |
+| Bill already paid | Bill sudah dibayar |
+| Bill is closed | Bill sudah ditutup |
+| Bill was changed on another device | Bill diubah di perangkat lain |
+| Reload bill | Muat ulang bill |
+| New total | Total baru |
+| Nothing new to send | Tidak ada item baru untuk dikirim |
+| Reprint last kitchen ticket | Cetak ulang tiket terakhir |
+| Last sent at :time | Terakhir dikirim :time |
+| Sent to kitchen | Sudah ke dapur |
+| Not sent to kitchen | Belum ke dapur |
+| Not sent to kitchen :minutes min | Belum ke dapur :minutes mnt |
+| Includes changes from another device | Termasuk perubahan dari perangkat lain |
+| From yesterday | Dari kemarin |
+| Past midnight | Lewat tengah malam |
+| Yesterday | Kemarin |
+| All bills | Semua bill |
+| My bills | Bill saya |
+| Unsent bills | Belum ke dapur |
+| No open bills | Tidak ada bill terbuka |
+| Search table, name or number | Cari meja, nama, atau nomor |
+| Table already has an open bill | Meja ini sudah punya bill terbuka |
+| Open that bill | Buka bill itu |
+| Age | Usia |
+| :minutes min | :minutes mnt |
+| Preview | Pratinjau |
+| Print preview | Pratinjau cetak |
+| Add the bill first | Tambahkan item dulu |
+| The bill may already exist, check the bills list | Bill mungkin sudah tersimpan, cek daftar bill |
+| Bill not found | Bill tidak ditemukan |
+| Unsent changes | Perubahan belum dikirim |
+| Open bill (:label) | Bill terbuka (:label) |
+| Pay bill | Bayar bill |
+| Print provisional bill | Cetak bill sementara |
+| Move or merge tables? Do not void the bill: change the table instead (the kitchen receives MOVED). | Mau pindah meja? Jangan dibatalkan: ubah mejanya saja (dapur menerima PINDAH). |
+| Only the owner or a manager can cancel items already sent to the kitchen | Hanya pemilik atau manajer yang dapat membatalkan item yang sudah dikirim ke dapur |
+| You are not allowed to do this | Anda tidak berhak melakukan ini |
+| Table or name is empty. The ticket will read TAKEAWAY #:number. | Meja atau nama belum diisi. Tiket akan tertulis BAWA PULANG #:number. |
+| Fill the table | Isi meja |
+| Send as takeaway | Kirim sebagai bawa pulang |
+| This product is already in the bill with another unit | Produk ini sudah ada di bill dengan satuan lain |
+| Left :left after open bills | Tersisa :left setelah bill terbuka |
+| Bill list could not be loaded | Daftar bill tidak dapat dimuat |
+| Bills are unavailable until the update is finished | Fitur bill belum tersedia sampai pembaruan selesai |
+
+### 15.2 Item bill, pembatalan item terkirim
+
+| EN (kunci) | ID |
+|---|---|
+| New | Baru |
+| Sent :sent, new :new | Terkirim :sent - baru :new |
+| Sent | Terkirim |
+| Cancelled :qty | Batal :qty |
+| Note changed | Catatan berubah |
+| Cancel sent item | Batalkan item yang sudah dikirim |
+| Remove :name? The kitchen already received :qty. The kitchen is only told when you press Send to kitchen. | Hapus :name? Dapur sudah menerima :qty. Dapur baru diberi tahu saat Anda menekan Kirim ke dapur. |
+| Remove | Hapus |
+| Back | Kembali |
+| Undo | Urungkan |
+| :count cancellations not yet told to the kitchen | Ada :count pembatalan yang belum diberitahukan ke dapur |
+| Wrong input | Salah input |
+| Customer cancelled | Pelanggan batal |
+| Out of stock | Stok habis |
+| Other | Lainnya |
+| Write the reason | Tulis alasan |
+
+### 15.3 Cetak (dipakai `LakasirReceiptConfig.labels` dan `OpenBillPresenter`)
+
+| EN (kunci) | ID |
+|---|---|
+| NOT PAID | BELUM DIBAYAR |
+| NOT A PROOF OF PAYMENT | BUKAN BUKTI PEMBAYARAN |
+| PROVISIONAL BILL | BILL SEMENTARA |
+| KITCHEN | DAPUR |
+| NEW ORDER | PESANAN BARU |
+| ADDITION - SHIPMENT :n | TAMBAHAN - KIRIMAN KE-:n |
+| CANCELLATION | PEMBATALAN |
+| BILL VOIDED | BILL DIBATALKAN |
+| CANCELLED | BATAL |
+| CHANGED NOTE | UBAH CATATAN |
+| MOVED: table :from -> :to | PINDAH: meja :from -> :to |
+| TAKEAWAY #:number | BAWA PULANG #:number |
+| TABLE :number | MEJA :number |
+| Shipment :n | Kiriman ke-:n |
+| (total :n) | (total :n) |
+| COPY | SALINAN |
+| Opened :time | Dibuka :time |
+| Thank you | Terima kasih |
+| Show prices on the kitchen ticket | Tampilkan harga di tiket dapur |
+| Kitchen ticket not printed. Check the printer, then try again. | Tiket dapur belum tercetak. Cek printer, lalu Coba lagi. |
+| Try again | Coba lagi |
+| Mark as sent without printing | Tandai terkirim tanpa cetak |
+| Printing is busy, please wait | Printer sedang bekerja, mohon tunggu |
+
+### 15.4 Pembayaran
+
+| EN (kunci) | ID |
+|---|---|
+| Payment | Pembayaran |
+| Amount due | Total tagihan |
+| Cash received | Uang diterima |
+| Exact amount | Uang pas |
+| Short by | Kurang |
+| Confirm payment received | Konfirmasi pembayaran diterima |
+| Due date | Jatuh tempo |
+| Down payment | Uang muka |
+| Receivable remaining | Sisa piutang |
+| Member is required for credit | Member wajib untuk kredit |
+| Enter the received amount | Masukkan uang yang diterima |
+| Payment failed | Pembayaran gagal |
+| Cash drawer is not opened | Laci kas belum dibuka |
+| Order items | Rincian pesanan |
+| Show items | Lihat rincian |
+| Hide items | Sembunyikan rincian |
+| Exact payment | Pembayaran pas |
+| Clear | Hapus |
+| Processing... | Memproses... |
+| Print kitchen ticket now (:n unsent changes) | Cetak tiket dapur sekarang (:n perubahan belum dikirim) |
+| :n changes will NOT be told to the kitchen | :n perubahan TIDAK akan diberitahukan ke dapur |
+| Kitchen ticket printed too | Tiket dapur ikut dicetak |
+| The bill changed while paying. New total :amount. | Bill berubah saat pembayaran. Total baru :amount. |
+| Continue even though stock is short (stock goes negative) | Lanjutkan walau stok kurang (stok akan minus) |
+| The price changed since the item was ordered | Harga berubah sejak item dipesan |
+| Down payment cannot exceed the total | Uang muka tidak boleh melebihi total |
+| The received money must be at least the total | Uang diterima harus minimal sebesar total |
+| Payment is being processed | Pembayaran sedang diproses |
+| Payment already recorded | Pembayaran sudah tercatat |
+| Payment method not found | Metode pembayaran tidak ditemukan |
+| Stock of :name is not enough (left :left) | Stok :name tidak cukup (tersisa :left) |
+| Product :name was deleted | Produk :name sudah dihapus; hapus barisnya dari bill |
+| The system is busy, please try again | Sistem sedang sibuk, coba lagi |
+| The cart changed, review it and pay again | Keranjang berubah, periksa lagi lalu bayar ulang |
+| Voucher is no longer available | Voucher sudah tidak tersedia |
+
+### 15.5 Yang tetap dari plan.md 11.4 (tidak diulang)
+
+Kunci dari plan.md 11.4 (chip kategori, tampilan kotak/daftar, catatan item, nama pelanggan, dock keranjang, Urungkan, dst.) tetap, KECUALI: "Provisional bill"/"NOT PAID"/"Close bill"/"Save as new bill"/"Remove item already sent to kitchen?"/"Reprint kitchen ticket" dari plan-v3 7.7 DIBATALKAN dan diganti baris di atas.
