@@ -27,7 +27,7 @@ class SellingController extends Controller
                 'updated_at',
                 'sellingDetails.product_id',
             ])
-            ->with(['member', 'paymentMethod', 'sellingDetails.product', 'user'])
+            ->with(['member', 'paymentMethod', 'sellingDetails.product.category', 'user'])
             ->isPaid()
             ->defaultSort('-created_at')
             ->simplePaginate($request->get('per_page', 10));
@@ -41,7 +41,7 @@ class SellingController extends Controller
     public function store(TransactionSellingStoreRequest $request)
     {
         $selling = $request->store();
-        $selling->load(['member', 'paymentMethod', 'sellingDetails.product', 'user']);
+        $selling->load(['member', 'paymentMethod', 'sellingDetails.product.category', 'user']);
 
         return $this->buildResponse()
             ->setMessage('success create selling')

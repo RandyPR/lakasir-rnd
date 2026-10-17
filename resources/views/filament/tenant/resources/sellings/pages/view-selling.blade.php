@@ -1,6 +1,9 @@
 @php
-  use App\Features\{SellingTax};
   use App\Models\Tenants\{Profile, Setting, About};
+  use App\Services\Tenants\OrderLineSorter;
+
+  $lineGroups = OrderLineSorter::group($record->sellingDetails);
+  $showGroupTitles = $lineGroups->count() >= 2;
 @endphp
 <x-filament-panels::page>
   <x-filament::section id="printElement">
@@ -24,6 +27,9 @@
               <li class="flex justify-between text-secondary text-sm mb-1"><span class="font-semibold">@lang('Date')</span><span>{{ now()->parse($record->date)->setTimezone(Profile::get()->timezone ?? 'UTC')->format('d F Y H:i') }}</span></li>
               <li class="flex justify-between text-secondary text-sm mb-1"><span class="font-semibold">@lang('Payment method')</span><span>{{ $record->paymentMethod->name }}</span></li>
               <li class="flex justify-between text-secondary text-sm mb-1"><span class="font-semibold">@lang('Voucher')</span><span>{{ $record->voucher ?? 'N/A' }}</span></li>
+              @if($record->note_plain)
+                <li class="text-secondary text-sm mb-1"><span class="font-semibold">@lang('Order note')</span><p class="whitespace-pre-line break-words">{{ $record->note_plain }}</p></li>
+              @endif
             </ul>
           </div>
         </div>
@@ -58,15 +64,26 @@
           </tr>
         </thead>
         <tbody>
-          @foreach($record->sellingDetails as $detail)
-            <tr>
-              <td class="p-2 border">
-                <h3 class="text-primary">{{ $detail->product->name }}</h3><span class="text-sm text-secondary"></span></td>
-              <td class="p-2 border text-center text-primary">{{ Number::currency($detail->price_per_unit, Setting::get('currency', 'IDR')) }}</td>
-              <td class="p-2 border text-center text-primary">{{ $detail->qty }}</td>
-              <td class="p-2 border text-center text-primary">{{ Number::currency($detail->discount_price, Setting::get('currency', 'IDR')) }}</td>
-              <td class="p-2 border text-center text-primary">{{ Number::currency($detail->total_price, Setting::get('currency', 'IDR')) }}</td>
-            </tr>
+          @foreach($lineGroups as $group)
+            @if($showGroupTitles)
+              <tr>
+                <td colspan="5" class="p-2 border bg-gray-50 dark:bg-white/5 text-xs font-semibold uppercase tracking-wide text-secondary">{{ $group['category'] ?? __('Uncategorized') }}</td>
+              </tr>
+            @endif
+            @foreach($group['lines'] as $detail)
+              <tr>
+                <td class="p-2 border">
+                  <h3 class="text-primary">{{ $detail->product?->name ?? '#'.$detail->product_id }}</h3>
+                  @if($detail->note)
+                    <span class="block text-sm text-secondary whitespace-pre-line break-words">{{ $detail->note }}</span>
+                  @endif
+                </td>
+                <td class="p-2 border text-center text-primary">{{ Number::currency($detail->price_per_unit, Setting::get('currency', 'IDR')) }}</td>
+                <td class="p-2 border text-center text-primary">{{ $detail->qty }}</td>
+                <td class="p-2 border text-center text-primary">{{ Number::currency($detail->discount_price, Setting::get('currency', 'IDR')) }}</td>
+                <td class="p-2 border text-center text-primary">{{ Number::currency($detail->total_price, Setting::get('currency', 'IDR')) }}</td>
+              </tr>
+            @endforeach
           @endforeach
         </tbody>
         <tfoot class="font-semibold">
@@ -112,8 +129,7 @@
   </x-filament::section>
 </x-filament-panels::page>
 <script>
-  window._lakasirViewSelling = @js($record->loadMissing('sellingDetails.product', 'paymentMethod', 'user', 'member', 'table'));
-  window._lakasirViewAbout = @js($about ?? \App\Models\Tenants\About::first());
+  window._lakasirViewSelling = @js($record);
 
   window.handlePrintInvoice = function() {
     if (window._lakasirHandlingInvoice) return;
@@ -128,161 +144,10 @@
     }
   };
 
-  function formatReceiptMoney(number, showCurrency = false) {
-    const num = Number(number) || 0;
-    const formatted = new Intl.NumberFormat('id-ID', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(num);
-
-    return showCurrency ? ('Rp ' + formatted) : formatted;
-  }
-
-  window.handlePrintReceipt = async function() {
-    if (window._lakasirHandlingReceipt || window._lakasirIsPrintingNow) {
-      console.warn('Receipt print already in progress, skipping duplicate invocation.');
-      return;
-    }
-    window._lakasirHandlingReceipt = true;
-
-    const printBtn = document.getElementById('printButton');
-    if (printBtn) {
-      printBtn.style.pointerEvents = 'none';
-      printBtn.style.opacity = '0.6';
-    }
-
-    let selling = window._lakasirViewSelling || @js($record);
-    let about = window._lakasirViewAbout || @js($about);
-    const printerData = getPrinter();
-    const showCurrency = Boolean(printerData?.show_currency ?? @js(\App\Models\Tenants\Setting::get('receipt_show_currency', false)));
-
-    try {
-      if (!printerData) {
-        if (typeof FilamentNotification !== 'undefined') {
-          new FilamentNotification()
-            .title('@lang('You should choose the printer first in printer setting')')
-            .danger()
-            .actions([
-              new FilamentNotificationAction('Setting')
-                .icon('heroicon-o-cog-6-tooth')
-                .button()
-                .url('/member/printer'),
-            ])
-            .send();
-        } else {
-          alert('Silakan atur printer terlebih dahulu di menu Pengaturan Printer.');
-        }
-        return;
-      }
-
-      const printer = new (window.Printer || Printer)(printerData);
-      let printerAction = printer;
-      const logo = printerData.logo || @js(Setting::get('receipt_logo'));
-      if (logo && printerData.driver !== 'bluetooth') {
-        await printerAction.image(logo, printerData.paper_width || @js(Setting::get('receipt_paper_width', '58')));
-      }
-      printerAction.font('a');
-      if (about != undefined && about != null) {
-        printerAction.size(1)
-          .align('center')
-          .text(about.shop_name || '')
-          .size(0)
-          .text(about.shop_location || '');
-        if (printerData.header != undefined && printerData.header) {
-          printerAction.text(printerData.header);
-        }
-      }
-
-      if (selling?.daily_order_number || selling?.formatted_daily_order_number) {
-        const orderLabel = selling.formatted_daily_order_number || ('Order #' + String(selling.daily_order_number).padStart(3, '0'));
-        printerAction
-          .align('center')
-          .size(1, 1)
-          .style('bold')
-          .text(orderLabel)
-          .style('normal')
-          .size(0, 0);
-      }
-
-      printerAction.align('left')
-        .text('-------------------------------');
-
-      printerAction.table(['@lang('Cashier')', selling?.user?.name || selling?.user?.cashier_name || '']);
-      if (selling?.table != undefined && selling?.table != null) {
-        printerAction.table(['@lang('Table')', String(selling.table.number || '')]);
-      }
-      const paymentMethodName = selling?.payment_method?.name || selling?.paymentMethod?.name || 'Cash';
-      printerAction.table(['@lang('Payment method')', paymentMethodName]);
-
-      let customerDisplay = '@lang('General')';
-      if (selling?.customer_name) {
-        customerDisplay = selling.customer_name;
-      } else if (selling?.member && selling.member.name) {
-        customerDisplay = selling.member.name;
-      }
-      printerAction.table(['@lang('Customer')', customerDisplay]);
-
-      printerAction.text('-------------------------------');
-      const details = selling?.selling_details || selling?.sellingDetails || [];
-      if (Array.isArray(details)) {
-        details.forEach(sellingDetail => {
-          let price = Number(sellingDetail.price) || 0;
-          let qty = Number(sellingDetail.qty) || 1;
-          let unitPrice = price / qty;
-          let productName = sellingDetail.product?.name || '';
-          printerAction.table([productName, formatReceiptMoney(unitPrice, showCurrency) + ' x ' + qty.toString()]);
-          if (sellingDetail.discount_price > 0) {
-            price = price - Number(sellingDetail.discount_price);
-            printerAction
-              .align('right')
-              .text(`(${formatReceiptMoney(sellingDetail.discount_price, showCurrency)})`);
-          }
-          printerAction
-            .align('right')
-            .text(formatReceiptMoney(price, showCurrency))
-            .align('left');
-        });
-      }
-      printerAction.text('-------------------------------');
-      if ("@js(feature(SellingTax::class))" == 'true') {
-        printerAction.table(['@lang('Tax')', `${selling?.tax ?? 0}%`])
-          .table(['@lang('Tax price')', formatReceiptMoney(selling?.tax_price ?? 0, showCurrency)]);
-      }
-      printerAction
-        .table(['@lang('Subtotal')', formatReceiptMoney(selling?.total_price ?? 0, showCurrency)])
-        .table(['@lang('Discount')', `(${formatReceiptMoney((selling?.total_discount_per_item ?? 0) + (selling?.discount_price ?? 0), showCurrency)})`])
-        .table(['@lang('Total price')', formatReceiptMoney(selling?.grand_total_price ?? 0, showCurrency)])
-        .text('-------------------------------')
-        .table(['@lang('Payed money')', formatReceiptMoney(selling?.payed_money ?? 0, showCurrency)])
-        .table(['@lang('Change')', formatReceiptMoney(selling?.money_changes ?? 0, showCurrency)])
-        .align('center');
-      if (printerData.footer != undefined && printerData.footer) {
-        printerAction.text(printerData.footer);
-      }
-      printerAction.align('left')
-        .text('copy');
-
-      await printerAction
-        .cut()
-        .print();
-    } catch (error) {
-      console.error('Print receipt error:', error);
-      if (typeof FilamentNotification !== 'undefined') {
-        new FilamentNotification()
-          .title('@lang('Gagal mencetak'): ' + (error.message || error))
-          .danger()
-          .send();
-      }
-    } finally {
-      setTimeout(() => {
-        window._lakasirHandlingReceipt = false;
-        if (printBtn) {
-          printBtn.style.pointerEvents = '';
-          printBtn.style.opacity = '';
-        }
-      }, 3000);
-    }
-  };
+  // The ESC/POS builder lives in the shared receipt-print partial (window.LakasirReceipt).
+  window.handlePrintReceipt = () => window.LakasirReceipt
+    ? window.LakasirReceipt.print(window._lakasirViewSelling, { buttonId: 'printButton', reprint: true })
+    : Promise.resolve(false);
 
   // Ensure button binding is immediate
   const attachPrintBtn = () => {
@@ -300,4 +165,3 @@
   document.addEventListener('livewire:navigated', attachPrintBtn);
   document.addEventListener('livewire:initialized', attachPrintBtn);
 </script>
-

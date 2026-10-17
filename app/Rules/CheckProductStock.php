@@ -4,6 +4,7 @@ namespace App\Rules;
 
 use App\Models\Tenants\PriceUnit;
 use App\Models\Tenants\Product;
+use App\Support\Money;
 use Closure;
 use Illuminate\Contracts\Validation\DataAwareRule;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -25,6 +26,10 @@ class CheckProductStock implements DataAwareRule, ValidationRule
      */
     protected $index;
 
+    /**
+     * Quick check for early, friendly feedback. The authoritative (locked) check is StockGuard::assert,
+     * run inside the sale transaction.
+     */
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
         $index = Str::of($attribute)->explode('.')[1];
@@ -44,7 +49,10 @@ class CheckProductStock implements DataAwareRule, ValidationRule
         $bool = $product?->stock < $value;
 
         if ($bool) {
-            $fail($this->message());
+            $fail(__('Stock of :name is not enough (left :left)', [
+                'name' => $product->name,
+                'left' => Money::qty((float) $product->stock),
+            ]));
         }
     }
 

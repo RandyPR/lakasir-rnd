@@ -10,6 +10,8 @@ use App\Models\Tenants\Selling;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Colors\Color;
+use Filament\Support\Facades\FilamentView;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Support\Htmlable;
 
 class ViewSelling extends ViewRecord
@@ -22,8 +24,15 @@ class ViewSelling extends ViewRecord
     {
         parent::mount($record);
 
-        $this->record->loadMissing('sellingDetails.product', 'paymentMethod', 'user', 'member', 'table');
+        $this->getRecord();
         $this->about = About::first();
+
+        // Rendered only on the full page load (not on Livewire updates): zero extra queries per request.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::BODY_END,
+            fn () => view('filament.tenant.partials.receipt-print'),
+            scopes: static::class,
+        );
     }
 
     public function getTitle(): string|Htmlable
@@ -63,7 +72,8 @@ class ViewSelling extends ViewRecord
 
     public function getRecord(): Selling
     {
-        return $this->record->load('sellingDetails.product', 'paymentMethod', 'user', 'member', 'table');
+        // Idempotent: the relations are loaded (and the lines sorted) once per request.
+        return $this->record->loadForReceipt();
     }
 
     public function getRelationManagers(): array

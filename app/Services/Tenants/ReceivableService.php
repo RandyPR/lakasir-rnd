@@ -6,16 +6,22 @@ use App\Models\Tenants\Product;
 use App\Models\Tenants\Receivable;
 use App\Models\Tenants\ReceivableItem;
 use App\Models\Tenants\Selling;
+use App\Support\Money;
 use Filament\Facades\Filament;
 
 class ReceivableService
 {
     public function create(Selling $selling, array $data = [])
     {
+        // The receivable is what the customer owes AFTER discounts (new receivables only; old rows are not rewritten).
+        $totalReceivable = Money::round(
+            $selling->total_price - ($selling->discount_price ?? 0) - ($selling->total_discount_per_item ?? 0)
+        );
+
         $receivable = new Receivable();
         $receivable->fill([
-            'total_receivable' => $selling->total_price,
-            'rest_receivable' => $selling->total_price - $selling->payed_money,
+            'total_receivable' => $totalReceivable,
+            'rest_receivable' => Money::round($totalReceivable - $selling->payed_money),
             'due_date' => $data['due_date'] ?? now()->addWeek(2),
         ]);
         $receivable->selling()->associate($selling);

@@ -281,6 +281,53 @@ class Product extends Model
         ]);
     }
 
+    /**
+     * Escapes LIKE wildcards for use with `LIKE ? ESCAPE '!'` (portable across SQLite and MySQL).
+     */
+    public static function escapeLike(string $s): string
+    {
+        return strtr($s, ['!' => '!!', '%' => '!%', '_' => '!_']);
+    }
+
+    /**
+     * Cashier search: the term may appear anywhere in the name, SKU or an active barcode.
+     * An empty term does not filter.
+     */
+    public function scopeSearchInPos(Builder $builder, string $term): Builder
+    {
+        $term = trim($term);
+
+        if ($term === '') {
+            return $builder;
+        }
+
+        $like = '%'.static::escapeLike($term).'%';
+
+        return $builder->where(function (Builder $query) use ($like) {
+            $query->whereRaw("products.name LIKE ? ESCAPE '!'", [$like])
+                ->orWhereRaw("products.sku LIKE ? ESCAPE '!'", [$like])
+                ->orWhereExists(function ($sub) use ($like) {
+                    $sub->selectRaw('1')->from('barcodes')
+                        ->whereColumn('barcodes.product_id', 'products.id')
+                        ->where('barcodes.is_active', true)
+                        ->whereRaw("barcodes.code LIKE ? ESCAPE '!'", [$like]);
+                });
+        });
+    }
+
+    public function scopeInCategory(Builder $builder, ?int $categoryId): Builder
+    {
+        return $categoryId === null ? $builder : $builder->where('products.category_id', $categoryId);
+    }
+
+    /**
+     * Services and non-stock goods have no stock limit: never "out of stock" in the cashier.
+     */
+    public function isStockUnlimited(): bool
+    {
+        return (bool) $this->is_non_stock || $this->type === 'service';
+    }
+
     public function scopeInStock(Builder $builder): Builder
     {
         return $builder->where(function ($query) {

@@ -39,6 +39,7 @@ class Printer extends Page implements HasActions, HasForms
             'logo' => Setting::get('receipt_logo', null),
             'driver' => Setting::get('receipt_driver', 'serial'),
             'show_currency' => (bool) Setting::get('receipt_show_currency', false),
+            'kitchen_ticket_show_price' => (bool) Setting::get('kitchen_ticket_show_price', false),
         ]);
     }
 
@@ -98,6 +99,12 @@ class Printer extends Page implements HasActions, HasForms
                 ->label(__('Tampilkan Simbol Mata Uang di Struk'))
                 ->helperText(__('Jika dinonaktifkan, struk hanya mencetak nominal angka (contoh: 12.000) tanpa tulisan Rp/IDR.'))
                 ->default(false),
+            Components\Toggle::make('kitchen_ticket_show_price')
+                ->label(__('Show prices on the kitchen ticket'))
+                ->default(false)
+                ->live()
+                // Saved as soon as it is switched: the Save button only sends the receipt fields it knows.
+                ->afterStateUpdated(fn ($state) => $this->saveToServer(['kitchen_ticket_show_price' => (bool) $state])),
             Components\Textarea::make('footer')
                 ->rows(4)
                 ->translateLabel(),
@@ -149,6 +156,9 @@ class Printer extends Page implements HasActions, HasForms
         }
         if (array_key_exists('show_currency', $settings)) {
             Setting::set('receipt_show_currency', (bool) $settings['show_currency']);
+        }
+        if (array_key_exists('kitchen_ticket_show_price', $settings)) {
+            Setting::set('kitchen_ticket_show_price', (bool) $settings['kitchen_ticket_show_price']);
         }
     }
 }

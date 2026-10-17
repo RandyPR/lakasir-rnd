@@ -31,11 +31,28 @@ class SellingDetailsRelationManager extends RelationManager
     {
         return $table
             ->recordTitleAttribute('product_id')
+            ->modifyQueryUsing(fn ($query) => $query->with([
+                'product' => fn ($product) => $product->withTrashed(),
+                'product.category',
+            ]))
             ->columns([
                 Tables\Columns\TextColumn::make('product.name')
                     ->translateLabel(),
+                Tables\Columns\TextColumn::make('product.category.name')
+                    ->label(__('Category'))
+                    ->placeholder('-'),
+                Tables\Columns\TextColumn::make('note')
+                    ->label(__('Note'))
+                    ->wrap()
+                    ->placeholder('-'),
                 Tables\Columns\TextColumn::make('qty')
                     ->translateLabel(),
+                Tables\Columns\TextColumn::make('price_per_unit')
+                    ->label(__('Unit price'))
+                    ->getStateUsing(fn (SellingDetail $sellingDetail): float => $sellingDetail->qty > 0
+                        ? round($sellingDetail->price / $sellingDetail->qty, 2)
+                        : (float) $sellingDetail->price)
+                    ->money(Setting::get('currency', 'IDR')),
                 Tables\Columns\TextColumn::make('price')
                     ->translateLabel()
                     ->sortable()

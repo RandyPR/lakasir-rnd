@@ -3,16 +3,28 @@
 namespace App\Services\Tenants;
 
 use App\Models\Tenants\Selling;
-use Illuminate\Support\Carbon;
+use App\Support\BusinessDay;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Throwable;
 
 class CustomerNameService
 {
     /**
      * Resolves the customer name by appending duplicate counter (e.g. "Test (2)", "Test (3)")
-     * if the same customer name already exists on the same day.
+     * if the same customer name already exists on the same business day, in a sale or in an open bill.
+     *
+     * @param  string|null  $businessDate  'Y-m-d' business date (default: today). A full datetime is converted to its business date.
+     * @param  int|null  $excludeSellingId  a sale that must not count against itself
+     * @param  int|null  $excludeBillId  an open bill that must not count against itself (renaming a bill)
      */
-    public static function generateDailyCustomerName(?string $name, ?string $date = null, ?int $excludeSellingId = null): ?string
-    {
+    public static function generateDailyCustomerName(
+        ?string $name,
+        ?string $businessDate = null,
+        ?int $excludeSellingId = null,
+        ?int $excludeBillId = null,
+    ): ?string {
         if ($name === null) {
             return null;
         }
@@ -28,33 +40,20 @@ class CustomerNameService
             $baseName = $trimmed;
         }
 
-        $targetDate = $date 
-            ? Carbon::parse($date)->toDateString() 
-            : now()->toDateString();
+        $targetDate = self::resolveBusinessDate($businessDate);
 
         try {
-            if (! \Illuminate\Support\Facades\Schema::hasColumn('sellings', 'customer_name')) {
+            if (! Schema::hasColumn('sellings', 'customer_name')) {
                 return $baseName;
             }
 
-            // Query existing sellings on targetDate that have customer_name
-            $query = Selling::query()
-                ->where(function ($q) use ($targetDate) {
-                    $q->whereDate('date', $targetDate)
-                        ->orWhere(function ($q2) use ($targetDate) {
-                            $q2->whereNull('date')
-                                ->whereDate('created_at', $targetDate);
-                        });
-                })
-                ->whereNotNull('customer_name')
-                ->where('customer_name', '!=', '');
-
-            if ($excludeSellingId) {
-                $query->where('id', '!=', $excludeSellingId);
+            $existingNames = self::sellingNames($targetDate, $excludeSellingId)
+                ->merge(self::billNames($targetDate, $excludeBillId));
+        } catch (Throwable $e) {
+            if (NumberingLock::isContention($e)) {
+                throw $e;
             }
 
-            $existingNames = $query->pluck('customer_name');
-        } catch (\Throwable $e) {
             return $baseName;
         }
 
@@ -91,5 +90,57 @@ class CustomerNameService
         $nextNumber = $maxNumber + 1;
 
         return "{$baseName} ({$nextNumber})";
+    }
+
+    private static function resolveBusinessDate(?string $businessDate): string
+    {
+        if ($businessDate === null || trim($businessDate) === '') {
+            return BusinessDay::today();
+        }
+
+        $businessDate = trim($businessDate);
+
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $businessDate)
+            ? $businessDate
+            : BusinessDay::dateOf($businessDate);
+    }
+
+    /**
+     * Names of the sales of the business day. Two index-friendly queries instead of one OR: the rows that have
+     * a date, then the legacy rows without a date (matched on created_at).
+     *
+     * @return Collection<int, string>
+     */
+    private static function sellingNames(string $businessDate, ?int $excludeSellingId): Collection
+    {
+        $base = fn () => Selling::query()
+            ->whereNotNull('customer_name')
+            ->where('customer_name', '!=', '')
+            ->when($excludeSellingId, fn ($q) => $q->where('id', '!=', $excludeSellingId));
+
+        return BusinessDay::scopeDay($base(), 'date', $businessDate)->pluck('customer_name')
+            ->merge(
+                BusinessDay::scopeDay($base()->whereNull('date'), 'created_at', $businessDate)->pluck('customer_name')
+            );
+    }
+
+    /**
+     * Names of the open (unpaid, not void) bills of the business day. Empty when the table does not exist yet.
+     *
+     * @return Collection<int, string>
+     */
+    private static function billNames(string $businessDate, ?int $excludeBillId): Collection
+    {
+        if (! DailyNumber::billsTableAvailable()) {
+            return collect();
+        }
+
+        return DB::table('open_bills')
+            ->where('business_date', $businessDate)
+            ->where('status', 'open')
+            ->whereNotNull('customer_name')
+            ->where('customer_name', '!=', '')
+            ->when($excludeBillId, fn ($q) => $q->where('id', '!=', $excludeBillId))
+            ->pluck('customer_name');
     }
 }
