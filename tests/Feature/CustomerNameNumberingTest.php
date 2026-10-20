@@ -144,7 +144,7 @@ test('creating selling transactions auto-numbers duplicate customer names within
         ->assertJsonPath('data.customer_name', 'Siti');
 });
 
-test('cashier Livewire component auto formats duplicate customer names', function () {
+test('cashier keeps the typed customer name and shows the numbered name the sale will get', function () {
     \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('tenant'));
     $user = User::first();
 
@@ -158,8 +158,13 @@ test('cashier Livewire component auto formats duplicate customer names', functio
         'date' => now()->toDateString(),
     ]);
 
+    // The name is numbered when the sale is recorded (SellingService); until then the cashier only sees a hint.
     Livewire::actingAs($user)
         ->test(Cashier::class)
-        ->set('cartDetail.customer_name', 'Andi')
-        ->assertSet('cartDetail.customer_name', 'Andi (2)');
+        ->call('commitCustomerName', 'Andi')
+        ->assertSet('cartDetail.customer_name', 'Andi')
+        ->assertSet('customerNameHint', 'Andi (2)')
+        ->assertSee('Andi (2)')
+        ->call('commitCustomerName', 'Siti')
+        ->assertSet('customerNameHint', null);
 });

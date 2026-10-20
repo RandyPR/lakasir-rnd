@@ -25,6 +25,7 @@ use App\Services\Tenants\SellingService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\RefreshDatabaseWithTenant;
@@ -948,11 +949,22 @@ test('a bill is paid with the tax it was created with', function () {
 test('every bill action of the cashier page answers 403 to somebody who may not use bills, and writes nothing', function () {
     $bill = obBill($this->owner, [[$this->nasi, 1]]);
     obSend($bill, $this->owner);
-    $page = obCashier();
-    $page->call('openBill', $bill->id);
+    $stranger = obUser([]);
 
+    // A request that aborts leaves the test component without a usable snapshot (the next call would answer 404),
+    // so every call starts from a page the owner opened the bill on.
+    $page = function () use ($bill, $stranger): Testable {
+        actingAs($this->owner);
+        $page = obCashier();
+        $page->call('openBill', $bill->id);
+        actingAs($stranger);
+
+        return $page;
+    };
+
+    actingAs($this->owner);
+    obCashier()->call('openBill', $bill->id);
     $before = [OpenBill::count(), OpenBillEvent::count(), OpenBill::find($bill->id)->version, OpenBillItem::count()];
-    actingAs(obUser([]));
 
     $calls = [
         ['openBill', [$bill->id]],
@@ -973,15 +985,15 @@ test('every bill action of the cashier page answers 403 to somebody who may not 
     ];
     foreach ($calls as [$method, $args]) {
         try {
-            $page->call($method, ...$args)->assertForbidden();
+            $page()->call($method, ...$args)->assertForbidden();
         } catch (PHPUnit\Framework\AssertionFailedError $e) {
             $this->fail($method.' must answer 403: '.$e->getMessage());
         }
     }
     foreach (['open-bill-selected', 'open-bill-pay', 'open-bill-changed'] as $event) {
-        $page->dispatch($event, $bill->id);
+        $page()->dispatch($event, $bill->id);
     }
-    $page->dispatch('kitchen-ack', ack: ['bill_id' => $bill->id, 'batch_no' => 2, 'items' => []], mode: 'printed')->assertForbidden();
+    $page()->dispatch('kitchen-ack', ack: ['bill_id' => $bill->id, 'batch_no' => 2, 'items' => []], mode: 'printed')->assertForbidden();
 
     actingAs($this->owner);
     expect([OpenBill::count(), OpenBillEvent::count(), OpenBill::find($bill->id)->version, OpenBillItem::count()])->toBe($before)
@@ -1007,7 +1019,7 @@ test('the version and the bill id cannot be set from the browser', function () {
     $page->call('openBill', $bill->id);
 
     foreach (['openBillId' => $other->id, 'openBillVersion' => 99, 'paymentPinned' => true, 'kitchenEnabled' => true, 'billsEnabled' => false] as $property => $value) {
-        expect(fn () => $page->set($property, $value))->toThrow(Livewire\Exceptions\CannotUpdateLockedPropertyException::class);
+        expect(fn () => $page->set($property, $value))->toThrow(CannotUpdateLockedPropertyException::class);
     }
     expect($page->get('openBillId'))->toBe($bill->id);
 });
