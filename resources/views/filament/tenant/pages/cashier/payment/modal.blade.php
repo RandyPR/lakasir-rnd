@@ -1,7 +1,8 @@
 {{--
   Payment sheet (modal id "proceed-the-payment"): a full-screen sheet on phones, a 5xl dialog on tablets and desktops.
-  Included by cashier.blade.php. All state lives in the Alpine component paymentFlow() (payment/script.blade.php);
-  the server renders only what it knows: the summary, the member list and the problems of the last attempt.
+  Included by cashier.blade.php. All state lives in the Alpine component paymentFlow() (payment/script.blade.php,
+  loaded once with the page by cashier/scripts.blade.php); the server renders only what it knows: the summary, the
+  member list and the problems of the last attempt.
 
   Opening the sheet runs $wire.syncCartForPayment() (unless the opener already did), closing it runs
   $wire.paymentClosed(); both are done by paymentFlow().
@@ -9,7 +10,6 @@
   Needs: $cartGroups, $cartCount, $totals, $canOverrideStock, $priceStaleLines, $members, $openBill, $openBillId,
   $kitchenEnabled, $kitchenPreview, $cartDetail, $cartItems, $currency, $locale, $errors.
 --}}
-@include('filament.tenant.pages.cashier.payment.script')
 @php
   use App\Support\Money;
   use Illuminate\Support\Number;

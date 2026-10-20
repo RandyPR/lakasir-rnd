@@ -95,7 +95,8 @@ trait CartInteraction
 
     /**
      * The current cashier's cart lines, or the lines of the active bill: product + category eager loaded,
-     * ordered by category then product name.
+     * ordered by category then product name. The unit prices of the products are loaded too: every line renders a
+     * price-setting component that reads them, which would otherwise cost one query per line.
      *
      * @return Collection<int, CartItem|OpenBillItem>
      */
@@ -103,7 +104,7 @@ trait CartInteraction
     {
         return OrderLineSorter::sort(
             $this->lineQuery()
-                ->with(['product.category', 'priceUnit'])
+                ->with(['product.category', 'product.priceUnits', 'priceUnit'])
                 ->get()
         );
     }

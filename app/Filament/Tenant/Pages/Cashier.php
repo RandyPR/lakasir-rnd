@@ -273,6 +273,12 @@ class Cashier extends Page implements HasForms
             fn () => view('filament.tenant.partials.receipt-print'),
             scopes: static::class,
         );
+
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::BODY_END,
+            fn () => view('filament.tenant.pages.cashier.scripts'),
+            scopes: static::class,
+        );
     }
 
     /**
