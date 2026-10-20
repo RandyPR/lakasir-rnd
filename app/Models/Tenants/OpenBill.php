@@ -82,7 +82,7 @@ class OpenBill extends Model
     }
 
     /**
-     * Customer name, else "Meja {table}", else "Bill #012". Does not load anything itself:
+     * Customer name, else "Meja {table}", else "Bill #012" (translated). Does not load anything itself:
      * eager load `table` when listing.
      */
     public function label(): string
@@ -98,7 +98,7 @@ class OpenBill extends Model
             return __('Table').' '.$tableNumber;
         }
 
-        return 'Bill #'.$this->paddedNumber();
+        return __('Bill #:number', ['number' => $this->paddedNumber()]);
     }
 
     /**

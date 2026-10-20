@@ -22,6 +22,8 @@
       'i18n' => [
           'Undo' => __('Undo'),
           'Item removed' => __('Item removed'),
+          'Bill #:number' => __('Bill #:number'),
+          'Bill #:number saved' => __('Bill #:number saved'),
           'Bill #:number (:label) saved' => __('Bill #:number (:label) saved'),
           'Bill #:number saved. NOT sent to the kitchen yet.' => __('Bill #:number saved. NOT sent to the kitchen yet.'),
           'Pay bill' => __('Pay bill'),
@@ -717,14 +719,16 @@
             onClick: () => { Toast.dismiss('bill-saved'); wire.sendToKitchen(d.id); },
           });
         }
+        // A bill without a name or table is labelled "Bill #012" itself: do not repeat the number.
+        const label = d.label && d.label !== t('Bill #:number', { number }) && d.label !== 'Bill #' + number ? d.label : '';
         Toast.show({
           id: 'bill-saved',
           testid: 'bill-saved-toast',
           tone: d.sent ? 'success' : 'warning',
           title: d.sent
-            ? t('Bill #:number (:label) saved', { number, label: d.label || '' })
+            ? (label ? t('Bill #:number (:label) saved', { number, label }) : t('Bill #:number saved', { number }))
             : t('Bill #:number saved. NOT sent to the kitchen yet.', { number }),
-          body: d.sent ? '' : (d.label || ''),
+          body: d.sent ? '' : label,
           duration: 9000,
           actions,
         });
