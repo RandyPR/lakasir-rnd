@@ -571,5 +571,8 @@
     "You are offline": "Anda sedang offline",
     "e.g. VIP-01, Table 12, Bar 2...": "mis. VIP-01, Meja 12, Bar 2...",
     "voucher expired": "voucer kedaluwarsa",
-    "Bill #:number saved": "Bill #:number tersimpan"
+    "Bill #:number saved": "Bill #:number tersimpan",
+    "Barcode already exists.": "Barcode sudah ada.",
+    "Status updated": "Status diperbarui",
+    "Stock Opname Item is required": "Item stok opname wajib diisi"
 }

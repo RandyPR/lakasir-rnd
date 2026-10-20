@@ -556,5 +556,8 @@
     "Customer": "Customer",
     "Other": "Other",
     "Please click the select printer button to choose the connected printer": "Please click the select printer button to choose the connected printer",
-    "Bill #:number saved": "Bill #:number saved"
+    "Bill #:number saved": "Bill #:number saved",
+    "Barcode already exists.": "Barcode already exists.",
+    "Status updated": "Status updated",
+    "Stock Opname Item is required": "Stock Opname Item is required"
 }

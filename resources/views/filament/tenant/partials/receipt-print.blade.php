@@ -372,6 +372,18 @@
       return new Array(Math.max(0, count) + 1).join(' ');
     }
 
+    // glue() turns spaces into a character wrapText does not break at (it is not whitespace, and toPrintable has
+    // already removed every control character), so "(total 3)" never ends up split over two lines.
+    var GLUE = '\u0001';
+
+    function glue(text) {
+      return String(text).split(' ').join(GLUE);
+    }
+
+    function unglue(line) {
+      return String(line).split(GLUE).join(' ');
+    }
+
     function printLines(printer, text, width, indent) {
       String(text || '').split('\n').forEach(function (part) {
         var clean = toPrintable(part);
@@ -465,11 +477,15 @@
 
       printer.font('a');
       if (about !== undefined && about !== null) {
-        printer.size(1)
-          .align('center')
-          .text(toPrintable(about.shop_name))
-          .size(0)
-          .text(toPrintable(about.shop_location));
+        // The name is printed twice as wide, so it wraps at half the columns.
+        printer.size(1).align('center');
+        wrapText(toPrintable(about.shop_name), Math.floor(ctx.width / 2), '').forEach(function (line) {
+          printer.text(line);
+        });
+        printer.size(0);
+        wrapText(toPrintable(about.shop_location), ctx.width, '').forEach(function (line) {
+          printer.text(line);
+        });
         if (ctx.printerData.header) {
           printLines(printer, ctx.printerData.header, ctx.width, '');
         }
@@ -669,7 +685,7 @@
 
       printer.size(0, 1).style('bold');
       wrapText(prefix + name, width, spaces(prefix.length)).forEach(function (line) {
-        printer.text(line);
+        printer.text(unglue(line));
       });
       printer.size(0, 0);
       if (note) {
@@ -785,7 +801,7 @@
           var totalQty = detail.total_qty !== undefined && detail.total_qty !== null ? Number(detail.total_qty) : qty;
           var name = itemName(detail);
           if (Math.abs(totalQty - qty) > 0.0005) {
-            name += ' ' + label('totalN', { n: qtyText(totalQty) });
+            name += ' ' + glue(label('totalN', { n: qtyText(totalQty) }));
           }
           tallLines(printer, ctx, qtyText(qty) + ' x ', name, toPrintable(detail.note));
 
