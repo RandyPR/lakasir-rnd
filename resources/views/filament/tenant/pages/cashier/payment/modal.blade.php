@@ -100,13 +100,18 @@
   :close-button="false"
   :close-by-clicking-away="false"
   :close-by-escaping="false"
-  x-data="paymentFlow()"
-  x-on:open-modal.window="onOpenModal($event)"
-  x-on:close-modal.window="onCloseModal($event)"
-  x-on:bill-conflict.window="onConflict($event)"
-  x-on:keydown.window="onKey($event)"
 >
-  <div class="flex min-h-0 flex-1 flex-col" data-testid="pay-sheet">
+  {{--
+    The Alpine component sits on the sheet, not on <x-filament::modal>: attributes given to the modal land on its
+    x-ref="modalContainer" element, and an x-data there would hide that ref from the modal's own open()/close().
+    On the sheet, the refs below (methods, serverErrors, overridePanel) register here and are found from every handler.
+  --}}
+  <div class="flex min-h-0 flex-1 flex-col" data-testid="pay-sheet"
+    x-data="paymentFlow()"
+    x-on:open-modal.window="onOpenModal($event)"
+    x-on:close-modal.window="onCloseModal($event)"
+    x-on:bill-conflict.window="onConflict($event)"
+    x-on:keydown.window="onKey($event)">
     {{-- Header --}}
     <header class="flex flex-none items-center gap-3 border-b border-gray-200 px-3 py-2 dark:border-white/10">
       <button type="button"
