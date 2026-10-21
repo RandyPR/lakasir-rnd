@@ -1,8 +1,8 @@
 # Status: redesign POS / kasir (2026-10-20)
 
 ## Posisi
-- Cabang `claude/project-thread-h561g4`, draft PR ke `1.x`. Cabang ini juga memuat commit T1 (single tenant, PR #2):
-  merge PR #2 dulu, lalu PR ini. Jangan push ke 1.x.
+- Cabang `claude/project-thread-h561g4`, draft PR #3 ke `1.x`. Cabang ini juga memuat commit T1 (single tenant,
+  PR #2): merge PR #2 dulu, lalu PR #3. Jangan push ke 1.x.
 - PHP 8.4 (Herd: `$env:Path="$env:USERPROFILE\.config\herd\bin;$env:Path"`). Test: `php vendor/bin/pest`
   (SQLite `database/testing.sqlite`, jangan jalankan dua Pest bersamaan pada berkas yang sama; untuk paralel pakai DB
   privat: `New-Item database\testing_x.sqlite; $env:DB_DATABASE="database/testing_x.sqlite"`). Benchmark:
@@ -13,7 +13,8 @@
 
 ## Selesai
 1. Performa: indeks stocks/cart_items, daftar produk jadi komponen sendiri (`Cashier\ProductBrowser`), aksi keranjang
-   tidak merender daftar produk. 5000 produk: cari ~0,2 dtk. Satuan harga dimuat sekali (bukan satu query per baris),
+   tidak merender daftar produk. 5000 produk (SQLite, waktu server per permintaan): cari 20-35 ms, tambah ke
+   keranjang 75-85 ms, sebelumnya 5-8 dtk per aksi. Satuan harga dimuat sekali (bukan satu query per baris),
    skrip dialog dimuat sekali per halaman (bukan dikirim ulang tiap ketukan).
 2. Open Bill: `open_bills`/`open_bill_items`/`open_bill_events`, `OpenBillService`, daftar bill (cari, filter,
    void), kirim ke dapur per batch dengan ack setelah benar-benar tercetak, batal item terkirim dengan alasan, konflik
