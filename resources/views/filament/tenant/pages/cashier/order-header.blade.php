@@ -15,7 +15,8 @@
       class="flex items-center justify-between gap-2 rounded-lg bg-lakasir-primary-strong px-3 py-1.5 text-white dark:bg-lakasir-primary-soft dark:text-[#1f1209]">
       <div class="min-w-0">
         @if ($billResumed)
-          <p class="truncate text-sm font-bold">{{ __('Resuming Bill #:number (:label)', ['number' => str_pad((string) $openBill['number'], 3, '0', STR_PAD_LEFT), 'label' => $openBill['label']]) }}</p>
+          {{-- Two lines at most: cut to one, the number and the table were the part that disappeared. --}}
+          <p class="line-clamp-2 break-words text-sm font-bold">{{ __('Resuming Bill #:number (:label)', ['number' => str_pad((string) $openBill['number'], 3, '0', STR_PAD_LEFT), 'label' => $openBill['label']]) }}</p>
         @else
           <p class="truncate text-sm font-bold">{{ $billTitle }}@if ($billLabel) <span class="font-semibold"> - {{ $billLabel }}</span>@endif</p>
         @endif

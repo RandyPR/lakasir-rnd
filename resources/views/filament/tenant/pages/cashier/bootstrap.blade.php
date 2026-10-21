@@ -122,7 +122,9 @@
     /** The Livewire handle of the cashier page, found in the DOM so it is never a stale reference. */
     const pageWire = () => {
       const root = document.querySelector('[data-testid="cashier-root"]');
-      const id = root && root.getAttribute('wire:id');
+      // wire:id sits on the component's own root, the wrapper around cashier-root: look upwards from it.
+      const host = root && root.closest('[wire\\:id]');
+      const id = host && host.getAttribute('wire:id');
       if (id && w.Livewire && typeof w.Livewire.find === 'function') {
         return w.Livewire.find(id);
       }
@@ -712,7 +714,7 @@
             onClick: () => { Toast.dismiss('bill-saved'); w.Livewire.dispatch('open-bill-selected', { id: d.id }); },
           },
         ];
-        if (!d.sent && wire && wire.kitchenEnabled) {
+        if (!d.sent && d.kitchen && wire) {
           actions.push({
             label: t('Send to kitchen'),
             testid: 'bill-saved-send',
@@ -721,14 +723,16 @@
         }
         // A bill without a name or table is labelled "Bill #012" itself: do not repeat the number.
         const label = d.label && d.label !== t('Bill #:number', { number }) && d.label !== 'Bill #' + number ? d.label : '';
+        // Sent to the kitchen, or a shop without one: a plain confirmation. Only a kitchen shop is warned.
+        const done = d.sent || !d.kitchen;
         Toast.show({
           id: 'bill-saved',
           testid: 'bill-saved-toast',
-          tone: d.sent ? 'success' : 'warning',
-          title: d.sent
+          tone: done ? 'success' : 'warning',
+          title: done
             ? (label ? t('Bill #:number (:label) saved', { number, label }) : t('Bill #:number saved', { number }))
             : t('Bill #:number saved. NOT sent to the kitchen yet.', { number }),
-          body: d.sent ? '' : label,
+          body: done ? '' : label,
           duration: 9000,
           actions,
         });
@@ -797,6 +801,9 @@
       };
 
       on('open-modal', (d) => {
+        // Paying makes the "Bill saved" toast stale: its Pay bill and Open buttons would sit over the dialog.
+        if (d.id === 'proceed-the-payment') Toast.dismiss('bill-saved');
+
         if (d.id === 'qr-scanner-modal' && typeof w.Html5QrcodeScanner !== 'undefined') {
           if (!camera) {
             camera = new w.Html5QrcodeScanner('qr-reader', { fps: 10, qrbox: { width: 300, height: 200 }, rememberLastUsedCamera: true }, false);

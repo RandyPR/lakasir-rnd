@@ -305,3 +305,17 @@ test('a cart action sends neither the product list nor the dialog scripts; the p
     expect($cashier->html())->not->toContain('<script')
         ->not->toContain('data-pv-card');
 });
+
+test('the page scripts reach the cashier component: its wire:id is on the wrapper around cashier-root', function () {
+    $this->withoutVite();
+    $html = $this->get(Cashier::getUrl())->assertOk()->getContent();
+
+    $root = Dom\HTMLDocument::createFromString($html, LIBXML_NOERROR)->querySelector('[data-testid="cashier-root"]');
+    $host = $root->closest('[wire\:id]');
+
+    // Typing a quantity, Undo and the bill toasts call the component through the handle the shared script finds.
+    expect($root->hasAttribute('wire:id'))->toBeFalse()
+        ->and(json_decode($host->getAttribute('wire:snapshot'), true)['memo']['name'])->toBe('app.filament.tenant.pages.cashier')
+        ->and(file_get_contents(resource_path('views/filament/tenant/pages/cashier/bootstrap.blade.php')))
+        ->toContain("root.closest('[wire\\\\:id]')");
+});

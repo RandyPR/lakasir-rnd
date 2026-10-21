@@ -225,10 +225,11 @@
             </div>
 
             <div class="space-y-1.5" role="group" aria-label="{{ __('Cash received') }}">
-              {{-- Fixed notes: every tap ADDS to the amount received (20.000 + 50.000 = 70.000) --}}
-              <div class="grid grid-cols-4 gap-1.5">
+              {{-- Fixed notes: every tap ADDS to the amount received (20.000 + 50.000 = 70.000). Below 360 px the exact
+                   amount gets its own row, so its label is not cut. --}}
+              <div class="grid grid-cols-3 gap-1.5 min-[360px]:grid-cols-4">
                 <button type="button"
-                  class="pay-key h-11 min-w-0 truncate rounded-lg border border-orange-300 bg-orange-50 px-1 text-[13px] font-bold text-orange-900 active:bg-orange-100 disabled:opacity-50 min-[360px]:text-sm dark:border-orange-500/40 dark:bg-orange-500/10 dark:text-orange-200"
+                  class="pay-key col-span-3 h-11 min-w-0 truncate rounded-lg border border-orange-300 bg-orange-50 px-1 text-[13px] font-bold text-orange-900 active:bg-orange-100 disabled:opacity-50 min-[360px]:col-span-1 min-[360px]:text-sm dark:border-orange-500/40 dark:bg-orange-500/10 dark:text-orange-200"
                   data-testid="pay-quick-exact"
                   x-bind:disabled="submitting"
                   x-on:mousedown.prevent

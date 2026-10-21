@@ -1,9 +1,11 @@
 <?php
 
+use App\Features\Discount;
 use App\Filament\Tenant\Pages\Cashier;
 use App\Models\Tenants\CartItem;
 use App\Models\Tenants\Category;
 use App\Models\Tenants\PaymentMethod;
+use App\Models\Tenants\PriceUnit;
 use App\Models\Tenants\Product;
 use App\Models\Tenants\Selling;
 use App\Models\Tenants\SellingDetail;
@@ -13,6 +15,7 @@ use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Laravel\Pennant\Feature;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\RefreshDatabaseWithTenant;
@@ -240,4 +243,40 @@ test('a typed quantity: 12,5 and 12.5 are accepted, 0 removes the line, a negati
     // 0 on a product that is not in the cart adds nothing.
     $page->call('addCart', $kopi->id, ['amount' => '0']);
     expect(CartItem::count())->toBe(0);
+});
+
+test('half a unit is sold directly as it is on a bill', function () {
+    $sugar = csProduct('Gula', $this->food, ['selling_price' => 20000]);
+
+    Livewire::test(Cashier::class)
+        ->call('addCart', $sugar->id, ['amount' => '0,5'])
+        ->call('syncCartForPayment')
+        ->set('cartDetail.payment_method_id', PaymentMethod::where('name', 'Cash')->value('id'))
+        ->set('cartDetail.payed_money', '10000')
+        ->call('proceedThePayment')
+        ->assertHasNoErrors();
+
+    $line = SellingDetail::query()->where('selling_id', Selling::sole()->id)->sole();
+    expect((float) $line->qty)->toBe(0.5)
+        ->and((float) Selling::sole()->total_price)->toBe(10000.0);
+});
+
+test('a line offers "more options" only when it has some: the line discount or unit prices', function () {
+    $kopi = csProduct('Kopi', $this->drinks);
+    $teh = csProduct('Teh', $this->drinks);
+    Feature::deactivate(Discount::class);
+
+    $page = Livewire::test(Cashier::class)->call('addCart', $kopi->id)->call('addCart', $teh->id);
+    $page->assertDontSeeHtml('data-testid="cart-item-more-toggle-');
+
+    // Unit prices on one product: only its line gets the button.
+    PriceUnit::create(['product_id' => $teh->id, 'unit' => 'teko', 'stock' => 10, 'selling_price' => 15000]);
+    $html = Livewire::test(Cashier::class)->html();
+    expect(substr_count($html, 'data-testid="cart-item-more-toggle-'))->toBe(1);
+
+    // The line discount is on: every line has it.
+    Feature::activate(Discount::class);
+    $html = Livewire::test(Cashier::class)->html();
+    expect(substr_count($html, 'data-testid="cart-item-more-toggle-'))->toBe(2)
+        ->and(substr_count($html, 'data-testid="cart-item-discount-input-'))->toBe(2);
 });

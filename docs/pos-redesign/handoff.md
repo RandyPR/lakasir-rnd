@@ -1,44 +1,74 @@
-# Handoff: redesign POS / kasir (ditahan oleh Randy, 2026-10-17)
+# Status: redesign POS / kasir (2026-10-20)
 
 ## Posisi
-- Repo `C:\webapp\lakasir-rnd`, cabang `feat/pos-redesign-perf` (dari `feat/t1-single-tenant`, PR #2 belum merge). Target PR: `1.x`. Jangan push ke 1.x. Belum ada PR untuk cabang ini.
-- Commit: `bd93625` slice performa (selesai, teruji, 87 test lulus); `aeb3a15` WIP besar (116 file) yang BELUM lengkap; commit berikutnya = commit handoff ini.
-- PHP 8.4 Herd: `$env:Path="$env:USERPROFILE\.config\herd\bin;$env:Path"`. Test: `php vendor/bin/pest` (SQLite `database/testing.sqlite`). Untuk menjalankan test paralel pakai DB privat: `New-Item database\testing_x.sqlite; $env:DB_DATABASE="database/testing_x.sqlite"`. Benchmark: `PERF=1 php vendor/bin/pest tests/Feature/CashierPerfTest.php`.
-- Produksi = MySQL, sudah ter-deploy dengan data nyata. Semua migrasi harus aditif, idempoten (SafeMigration), jangan jalankan `migrate` biasa di produksi (3 migrasi lama menghapus kolom; lihat `docs/deploy-open-bill.md`, `php artisan pos:preflight`).
+- Cabang `claude/project-thread-h561g4`, draft PR ke `1.x`. Cabang ini juga memuat commit T1 (single tenant, PR #2):
+  merge PR #2 dulu, lalu PR ini. Jangan push ke 1.x.
+- PHP 8.4 (Herd: `$env:Path="$env:USERPROFILE\.config\herd\bin;$env:Path"`). Test: `php vendor/bin/pest`
+  (SQLite `database/testing.sqlite`, jangan jalankan dua Pest bersamaan pada berkas yang sama; untuk paralel pakai DB
+  privat: `New-Item database\testing_x.sqlite; $env:DB_DATABASE="database/testing_x.sqlite"`). Benchmark:
+  `PERF=1 php vendor/bin/pest tests/Feature/CashierPerfTest.php`. Harness Node (`tests/Support/*.mjs`) dijalankan oleh
+  `PaymentFlowTest` dan `ReceiptPartialTest`; tanpa `node` keduanya dilewati.
+- Produksi = MySQL dengan data nyata. Deploy hanya lewat `docs/deploy-open-bill.md` (`pos:preflight --pre`, migrasi
+  satu per satu dengan `--path`, `npm run build`). Jangan jalankan `php artisan migrate` biasa di produksi.
 
-## Sudah selesai
-1. Perf (bd93625): indeks stocks/cart_items, `Product::scopeSellableInPos/withStockTotal`, `cartQtyFor`, `refreshCart`. 5-8 dtk -> ~0,2 dtk per aksi (5000 produk, SQLite).
-2. Gelombang 1 (data-layer, domain-support, numbering, receipt-print): 7 migrasi, SafeMigration, PosPreflight, model OpenBill/OpenBillItem/OpenBillEvent, Money, OrderTotals, PaymentPlanner, StockGuard, OpenBillGate, BusinessDay, DailyNumber, NumberingLock, partial `receipt-print` (window.LakasirReceipt mode receipt|bill|kitchen + preview).
-3. Gelombang 2 (open-bill-backend, open-bills-component, cashier-livewire, tests-core): OpenBillService/Context/Presenter, Livewire `Cashier/{ProductBrowser,CartItemNote,OpenBills}`, Cashier.php/CartInteraction diperluas, banyak test (OpenBill*, DailyNumbering, StockGuard, dst.).
-4. Gelombang 3 SEBAGIAN: ada view di `resources/views/filament/tenant/pages/cashier/{bills,payment,...}` dan `resources/views/livewire/cashier/*`, tapi belum diverifikasi, belum tentu lengkap/terintegrasi. Cek dengan `docs/pos-redesign/salvage.json` (status gelombang lama) dan baca kodenya, jangan percaya.
+## Selesai
+1. Performa: indeks stocks/cart_items, daftar produk jadi komponen sendiri (`Cashier\ProductBrowser`), aksi keranjang
+   tidak merender daftar produk. 5000 produk: cari ~0,2 dtk. Satuan harga dimuat sekali (bukan satu query per baris),
+   skrip dialog dimuat sekali per halaman (bukan dikirim ulang tiap ketukan).
+2. Open Bill: `open_bills`/`open_bill_items`/`open_bill_events`, `OpenBillService`, daftar bill (cari, filter,
+   void), kirim ke dapur per batch dengan ack setelah benar-benar tercetak, batal item terkirim dengan alasan, konflik
+   versi (dua perangkat), bayar bill lewat `SellingService::create` (laporan dan stok lama tidak berubah).
+3. Pembayaran baru: Tunai (Uang pas, +20.000/+50.000/+100.000 menambah, saran pintar, papan angka), non-tunai dengan
+   konfirmasi, Kredit (member, jatuh tempo, uang muka). Struk, Bill sementara, tiket dapur dari satu kode cetak
+   (`window.LakasirReceipt`) + Pratinjau. Nomor harian dan nama "(2)" direset tengah malam WIB.
+4. Test: 743 test Pest (1 benchmark dilewati tanpa `PERF=1`).
+5. Audit MySQL 8.0.46 dan 5.7.44 (Docker): ke-7 migrasi lulus, idempoten, kondisi setengah jalan diperbaiki dengan
+   menjalankan ulang, preflight menolak migrasi lama yang destruktif, `down()` aman (error MySQL 1553 ditangani),
+   balapan dua proses: tidak ada nomor/nama ganda, unit terakhir hanya terjual sekali, bill yang sama dibayar dua kali
+   = satu penjualan.
+6. Cek browser (skrip di `docs/pos-redesign/browser/`): semua alur fnb dan retail, 320 sampai 1280 px, terang dan
+   gelap, tanpa overflow horizontal dan tanpa error konsol. Temuan yang sudah diperbaiki: skrip bersama tidak menemukan
+   komponen halaman (ketik jumlah, Urungkan, "Kirim ke dapur" di toast tidak jalan); dialog konflik ganda saat bayar;
+   dialog bayar tetap terbuka (dan beralih ke order baru) saat bill sudah dibayar di tab lain; toast retail menyebut
+   dapur; tombol "lainnya" kosong; label "Uang pas" terpotong di 320 px; chip "Melanjutkan Bill" memotong nomornya;
+   setengah unit (0,5) ditolak saat bayar langsung tapi diterima lewat bill; toast "Bill tersimpan" menutupi dialog
+   bayar; daftar bill kosong menampilkan ringkasan "0"; SQLite lokal "database is locked" saat ack dapur.
 
-## Sisa (urut)
-1. Audit file view gelombang 3 vs kontrak (plan-v3 sec. 14, 16): product-view, cashier-shell (hapus JS cetak inline lama + listener scanner `keypress` yang rusak, wiring LakasirReceipt, `lang/id.json`+`en.json`, tailwind content globs, build aset bila `public/build` tracked), open-bill-view, payment-view.
-2. Tambahan Randy: tombol pecahan 20.000 / 50.000 / 100.000 selalu tampil di layar bayar + "Uang pas" + 1-2 saran pintar; tombol MENAMBAH per ketukan (bukan mengganti), ada total diterima + tombol Hapus.
-3. tests-bills, tests-cashier (+ integrasi: `route:list`, semua view yang direferensikan ada), jalankan seluruh suite.
-4. Review: code-reviewer, mysql-migration-auditor (MySQL belum pernah dijalankan; hanya SQLite), uiux di browser pada 320/375/414/768/1024/1280 (DB demo terpisah, JANGAN pakai `database/database.sqlite`), debugger.
-5. Dokumen deploy (`docs/deploy-open-bill.md` sudah ada dari gelombang 1; cek akurasi), commit, buka PR ke 1.x (blok atribusi PR wajib: lihat prompt proyek), assign + review ke RandyPR.
+## Belum / perlu keputusan Randy
+- Pertanyaan lama yang belum dijawab: (a) topologi printer, (b) satu akun dipakai banyak perangkat,
+  (c) output `php artisan migrate:status` di produksi sebelum deploy.
+- Bug lama di luar redesign: `TenantLogin::authenticate` error 500 bila login dibatasi (lebih dari 5 percobaan per
+  menit), karena `parent::authenticate()` mengembalikan null. Belum diubah.
+- CI (`.github/workflows/ci.yaml`) butuh secret DB dan aset ter-build; di fork ini merah untuk semua PR.
+- Belum diukur dengan data produksi asli di MySQL (hanya data uji 5000 produk di SQLite dan 300 produk di MySQL).
 
 ## Keputusan (jawaban Randy / default yang diterima)
-- Bill = tabel baru `open_bills`+`open_bill_items`, dikonversi ke Selling lewat `SellingService::create` saat bayar (laporan/stok tidak tersentuh). Stok dicek/dikurangi saat bayar saja.
-- Bill dibuat 23:55 dibayar 00:05 -> hari pembayaran, nomor baru. Zona waktu app TETAP UTC; `config('pos.business_timezone')` default Asia/Jakarta untuk nomor harian, nomor bill, dan penomoran nama "(2)".
-- Batal item yang sudah dikirim ke dapur: pemilik / izin update-delete selling / pembuat bill <=10 menit, alasan wajib dan dicatat. Override stok untuk item yang sudah disajikan: pemilik/update selling.
-- Harga item bill tetap harga saat dipesan, pajak dikunci saat bill dibuat. Setelah Simpan/Kirim kembali ke order baru kosong. Istilah "Bill"/"Bill sementara" (bukan "Bon"). Tanpa meja+nama = BAWA PULANG dengan konfirmasi. Pindah meja tercetak "PINDAH meja a -> b".
-- Tiket dapur tanpa harga (toggle di Printer); struk dan bill sementara memakai harga satuan x qty = total baris. Kategori urut A-Z natural, tanpa kategori terakhir, judul per kategori di keranjang dan cetak. Catatan per item (cart_items.note, selling_details.note).
-- Scanner barcode fisik belum dipakai; detektor global tetap dibangun (listener lama kemungkinan ReferenceError).
-- Belum dijawab Randy: topologi printer (a), satu akun dipakai banyak perangkat (b), commit/status migrasi di produksi (c, minta output `php artisan migrate:status`).
+- Bill = tabel baru `open_bills`+`open_bill_items`, dikonversi ke Selling lewat `SellingService::create` saat bayar.
+  Stok dicek/dikurangi saat bayar saja.
+- Bill dibuat 23:55 dibayar 00:05 -> hari pembayaran, nomor baru. Zona waktu app TETAP UTC;
+  `config('pos.business_timezone')` default Asia/Jakarta untuk nomor harian, nomor bill, dan penomoran nama "(2)".
+- Batal item yang sudah dikirim ke dapur: pemilik / izin update-delete selling / pembuat bill <=10 menit, alasan wajib
+  dan dicatat. Override stok untuk item yang sudah disajikan: pemilik/update selling.
+- Harga item bill tetap harga saat dipesan, pajak dikunci saat bill dibuat. Setelah Simpan/Kirim kembali ke order
+  baru kosong. Istilah "Bill"/"Bill sementara" (bukan "Bon"). Tanpa meja+nama = BAWA PULANG dengan konfirmasi.
+  Pindah meja tercetak "PINDAH meja a -> b".
+- Tiket dapur tanpa harga (toggle di Printer); struk dan bill sementara memakai harga satuan x qty = total baris.
+  Kategori urut A-Z natural, tanpa kategori terakhir. Catatan per item (cart_items.note, selling_details.note).
+- Jumlah pecahan diterima di keranjang, bill, dan bayar langsung (> 0). API (`TransactionSellingStoreRequest`) tetap
+  `min:1`, tidak diubah.
+- Scanner barcode fisik belum dipakai; detektor global tetap ada.
 
 ## Gotcha
 - Jangan ubah `app.timezone` (menggeser semua tanggal yang tersimpan).
-- Pest jalan di SQLite; `Setting::get` memakai cache file (falsy value sekarang di-cache via `Cache::has`).
-- Beberapa test lama memakai `now()->toDateString()`: bekerja tergantung jam; bekukan dengan `Carbon::setTestNow` (16:59:59Z / 17:00:00Z = tengah malam WIB).
+- Komponen Livewire halaman kasir ada di pembungkus `cashier-root`, bukan di `cashier-root` sendiri: skrip bersama
+  mencarinya dengan `closest('[wire\\:id]')` (dijaga oleh test di `CashierProductBrowserTest`).
+- SQLite lokal: `busy_timeout` 5000 ms di `config/database.php` (tanpa itu permintaan yang berdekatan bisa gagal
+  "database is locked").
+- `Setting::get` memakai cache; test yang memakai tanggal harus membekukan waktu (`Carbon::setTestNow`, 16:59:59Z /
+  17:00:00Z = tengah malam WIB).
 - Pest tidak mendaftarkan TestCase untuk direktori selain `Feature`/`Unit`.
-- `OpenBill::$table` adalah nama tabel; relasi lewat `getRelationValue('table')`.
+- `OpenBill::$table` adalah nama tabel; relasi meja lewat `getRelationValue('table')`.
 - File sementara (`database/testing_*.sqlite`, `demo.sqlite`) harus dihapus; `*.sqlite` di-gitignore.
-- Rujukan lengkap di folder ini: `plan-v3.md` (sec. 13-19 mengikat), `final_contract_v3.txt`, `final_packages_v3.json` (kepemilikan file), `design-notes-v3.md`, `kasir-mock-v3.html` (mock interaktif), `openbill-research.md`.
-- Artifact mock (privat): https://claude.ai/artifact/XdBdV32uBHqtAyNpEQavrw
-
-## Saran model/effort untuk melanjutkan
-- Gelombang tampilan + integrasi (banyak file Blade/Alpine, rawan overflow): model besar (Opus) effort medium-tinggi untuk satu sesi utama; subagent implementasi per paket di effort medium.
-- Test, review kode, audit migrasi: Sonnet effort medium cukup untuk test-runner; code-reviewer dan audit MySQL sebaiknya effort tinggi.
-- Hindari menjalankan 8+ agent paralel sekaligus; batas penggunaan sudah terlewati 3 kali.
+- Rujukan: `plan-v3.md` (bagian 13-19 mengikat), `final_contract_v3.txt`, `final_packages_v3.json`,
+  `design-notes-v3.md`, `kasir-mock-v3.html`, `openbill-research.md`. Artifact mock (privat):
+  https://claude.ai/artifact/XdBdV32uBHqtAyNpEQavrw

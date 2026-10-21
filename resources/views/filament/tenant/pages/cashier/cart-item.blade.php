@@ -20,6 +20,8 @@
   $unlimited = $product ? $product->isStockUnlimited() : true;
   $atStockLimit = ! $unlimited && $qty >= (float) ($product->stock ?? 0);
   $stale = $isBill && in_array((int) $item->getKey(), $priceStaleLines ?? [], true);
+  // "More options" holds the line discount and the unit price: without either it would open an empty box.
+  $hasOptions = feature(Discount::class) || ($product?->priceUnits?->isNotEmpty() ?? false);
 
   // Kitchen status of the line: only on a bill the kitchen has received before.
   $chip = null;
@@ -85,6 +87,7 @@
     :bill-id="$isBill ? $openBillId : null"
     :key="'note-'.$ctxKey.'-'.$item->id" />
 
+  @if ($hasOptions)
   <div x-show="more" x-cloak id="line-opts-{{ $ctxKey }}-{{ $item->id }}" class="mt-2 space-y-2 rounded-lg bg-gray-100 p-2 dark:bg-gray-800">
     @feature(Discount::class)
       <div>
@@ -99,6 +102,7 @@
     @endfeature
     <livewire:price-setting :cart-item="$item" :key="'price-'.$ctxKey.'-'.$item->id" />
   </div>
+  @endif
 
   <div class="mt-1 flex items-center justify-between gap-2">
     <div class="flex items-center">
@@ -110,14 +114,16 @@
         <x-heroicon-o-pencil-square class="h-5 w-5" />
         <span class="hidden min-[360px]:inline" x-text="hasNote ? @js(__('Edit note')) : @js(__('Add note'))"></span>
       </button>
-      <button type="button" data-testid="cart-item-more-toggle-{{ $item->id }}"
-        x-on:click="more = !more"
-        :aria-expanded="more ? 'true' : 'false'"
-        aria-controls="line-opts-{{ $ctxKey }}-{{ $item->id }}"
-        aria-label="{{ __('More options') }}: {{ $name }}"
-        class="{{ $iconBtn }}">
-        <x-heroicon-o-ellipsis-horizontal class="h-5 w-5" />
-      </button>
+      @if ($hasOptions)
+        <button type="button" data-testid="cart-item-more-toggle-{{ $item->id }}"
+          x-on:click="more = !more"
+          :aria-expanded="more ? 'true' : 'false'"
+          aria-controls="line-opts-{{ $ctxKey }}-{{ $item->id }}"
+          aria-label="{{ __('More options') }}: {{ $name }}"
+          class="{{ $iconBtn }}">
+          <x-heroicon-o-ellipsis-horizontal class="h-5 w-5" />
+        </button>
+      @endif
     </div>
 
     <div role="group" aria-label="{{ __('Quantity of :name', ['name' => $name]) }}"

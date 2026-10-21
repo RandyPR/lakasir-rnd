@@ -85,8 +85,9 @@
         <div class="flex items-start justify-between gap-3 px-4 pb-2 pt-4">
           <div class="min-w-0">
             <h2 id="bills-drawer-title" class="text-lg font-semibold text-gray-950 dark:text-white">{{ __('Open bills') }}</h2>
-            @if ($open && ! $loadError)
-              <p class="{{ $muted }} text-sm tabular-nums" data-testid="bills-summary">{{ $bills->count() }}@if ($bills->isNotEmpty()) · {{ $money($bills->sum('amount_due')) }}@endif</p>
+            {{-- Count and total of the open bills; an empty list says so itself below. --}}
+            @if ($open && ! $loadError && $bills->isNotEmpty())
+              <p class="{{ $muted }} text-sm tabular-nums" data-testid="bills-summary">{{ $bills->count() }} · {{ $money($bills->sum('amount_due')) }}</p>
             @endif
           </div>
           <button type="button" data-testid="bills-close" x-on:click="closeDrawer()" aria-label="{{ __('Back') }}"

@@ -248,7 +248,7 @@ test('Save turns the order into a bill and leaves an empty new order', function 
 
     $saved = obEvents($page, 'bill-saved');
     expect($saved)->toHaveCount(1)
-        ->and($saved[0])->toMatchArray(['id' => $bill->id, 'number' => 1, 'sent' => false])
+        ->and($saved[0])->toMatchArray(['id' => $bill->id, 'number' => 1, 'sent' => false, 'kitchen' => false])
         ->and($saved[0]['label'])->toContain('Budi');
     $page->assertDispatched('order-reset');
 });
@@ -335,7 +335,7 @@ test('Send to kitchen saves the bill, hands the ticket and its ack to the browse
         ->and($print[0]['bill']['selling_details'])->toHaveCount(2);
     // the screen is a new empty order again
     expect($page->get('openBillId'))->toBeNull()->and(CartItem::count())->toBe(0);
-    expect(obEvents($page, 'bill-saved')[0])->toMatchArray(['id' => $bill->id, 'sent' => true]);
+    expect(obEvents($page, 'bill-saved')[0])->toMatchArray(['id' => $bill->id, 'sent' => true, 'kitchen' => true]);
 
     // printing happened only in the browser: until its ack the bill is NOT sent
     expect($bill->fresh()->kitchen_batch_count)->toBe(0);
@@ -598,6 +598,22 @@ test('the poll leaves the new order alone and tells when the bill was closed els
 
     expect($page->get('openBillId'))->toBeNull();
     $page->assertNotified(__('Bill is closed'));
+});
+
+test('opening the payment of a bill paid elsewhere closes the dialog instead of offering the new order', function () {
+    $bill = obBill($this->owner, [[$this->nasi, 1]]);
+    $page = obCashier();
+    $page->call('addCart', $this->teh->id);         // the new order has a line of its own
+    $page->call('openBill', $bill->id);
+
+    obSvc()->pay(OpenBill::find($bill->id), ['payment_method_id' => obMethod()->id, 'payed_money' => 25000], 1, $this->owner);
+    $page->call('syncCartForPayment');
+
+    $page->assertNotified(__('Bill already paid'))
+        ->assertDispatched('close-modal', id: 'proceed-the-payment')
+        ->assertSet('paymentPinned', false);
+    expect($page->get('openBillId'))->toBeNull()
+        ->and($page->get('cartItems'))->toHaveCount(1);
 });
 
 test('adding to a bill checks the stock, and the bill keeps what fits', function () {

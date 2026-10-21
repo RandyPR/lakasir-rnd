@@ -691,6 +691,10 @@ class Cashier extends Page implements HasForms
             $this->reloadBill(true);
 
             if ($this->openBillId === null) {
+                // Paid or voided elsewhere (the toast says which). The page is back on the new order, which may
+                // have lines of its own: the dialog must not go on to take money for those.
+                $this->dispatch('close-modal', id: 'proceed-the-payment');
+
                 return;
             }
         } else {
@@ -1423,6 +1427,8 @@ class Cashier extends Page implements HasForms
             number: (int) $bill->number,
             label: $bill->label(),
             sent: $sent,
+            // A shop without a kitchen gets a plain "saved", never "NOT sent to the kitchen yet".
+            kitchen: $this->kitchenEnabled,
         );
         $this->dispatch('open-bills-changed');
     }
@@ -2134,7 +2140,8 @@ class Cashier extends Page implements HasForms
             'payment_method_id' => ['required'],
             'products' => ['required', 'array'],
             'products.*.product_id' => ['required', 'exists:products,id'],
-            'products.*.qty' => ['required', 'numeric', 'min:1'],
+            // Any quantity above zero, as the cart and a bill take it (half a kilo); min:1 refused 0,5 here only.
+            'products.*.qty' => ['required', 'numeric', 'gt:0'],
         ]);
         if ($validator->fails()) {
             throw ValidationException::withMessages($validator->messages()->toArray());
