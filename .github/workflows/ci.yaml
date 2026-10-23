@@ -3,11 +3,12 @@ env:
   APP_KEY: base64:LBjssn+d5IhFzVud6YqQMezXtFSyNMF1UGFdiNWIpO4=
   CACHE_DRIVER: array
   DB_CONNECTION: testing
-  DB_DATABASE: ${{ secrets.DB_DATABASE }}
+  # The MySQL service below only lives for this job, so its name and password are not secrets.
+  DB_DATABASE: testing
   DB_PORT: 3306
-  DB_USERNAME: ${{ secrets.DB_USERNAME }}
-  DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-  DB_DATABASE_TESTING: ${{ secrets.DB_DATABASE }}
+  DB_USERNAME: root
+  DB_PASSWORD: secret
+  DB_DATABASE_TESTING: testing
   DB_HOST: "127.0.0.1"
 on:
   push:
