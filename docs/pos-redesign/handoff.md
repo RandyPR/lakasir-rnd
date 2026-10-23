@@ -24,7 +24,7 @@
 3. Pembayaran baru: Tunai (Uang pas, +20.000/+50.000/+100.000 menambah, saran pintar, papan angka), non-tunai dengan
    konfirmasi, Kredit (member, jatuh tempo, uang muka). Struk, Bill sementara, tiket dapur dari satu kode cetak
    (`window.LakasirReceipt`) + Pratinjau. Nomor harian dan nama "(2)" direset tengah malam WIB.
-4. Test: 743 test Pest, lulus di SQLite, MySQL 8.0 dan MySQL 5.7 (1 benchmark dilewati tanpa `PERF=1`; di MySQL
+4. Test: 744 test Pest, lulus di SQLite, MySQL 8.0 dan MySQL 5.7 (1 benchmark dilewati tanpa `PERF=1`; di MySQL
    satu test lagi dilewati karena hanya untuk SQLite).
 5. Audit MySQL 8.0.46 dan 5.7.44 (Docker): ke-7 migrasi lulus, idempoten, kondisi setengah jalan diperbaiki dengan
    menjalankan ulang, preflight menolak migrasi lama yang destruktif, `down()` aman (error MySQL 1553 ditangani),
@@ -40,14 +40,16 @@
 7. Test di MySQL 8.0 dan 5.7 (2026-10-23): satu bug nyata, pencarian kasir dengan kata yang diawali "!" tidak
    menemukan apa pun di MySQL 5.7 (bug `LIKE ... ESCAPE` MySQL 5.7 pada utf8mb4_unicode_ci); kata seperti itu
    sekarang memakai "~" sebagai karakter escape. Sisanya masalah persiapan test, bukan kode kasir.
+8. CI (`.github/workflows/ci.yaml`) menjalankan semua test di MySQL 5.7 dengan database sementara milik job, tanpa
+   secret repo. Sejak Mei 2026 (upstream) langkah test CI berhenti sebelum test pertama: `test.sh` memberi `-vvv` ke
+   Pest (`Unknown option "-v"`) lalu menganggap kode keluar 2 sebagai lulus. Sekarang kode keluar Pest dipakai apa
+   adanya.
 
 ## Belum / perlu keputusan Randy
 - Pertanyaan lama yang belum dijawab: (a) topologi printer, (b) satu akun dipakai banyak perangkat,
   (c) output `php artisan migrate:status` di produksi sebelum deploy.
 - Bug lama di luar redesign: `TenantLogin::authenticate` error 500 bila login dibatasi (lebih dari 5 percobaan per
   menit), karena `parent::authenticate()` mengembalikan null. Belum diubah.
-- CI (`.github/workflows/ci.yaml`) menjalankan semua test di MySQL 5.7 dan butuh secret repo `DB_DATABASE`,
-  `DB_USERNAME`, `DB_PASSWORD`; tanpa itu CI merah sebelum test pertama.
 - Belum diukur dengan data produksi asli di MySQL (hanya data uji 5000 produk di SQLite dan 300 produk di MySQL).
 
 ## Keputusan (jawaban Randy / default yang diterima)
