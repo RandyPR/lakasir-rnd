@@ -37,7 +37,7 @@ function lockQueries(Closure $run): array
 {
     $sql = [];
     $listener = function (QueryExecuted $query) use (&$sql) {
-        $sql[] = strtolower($query->sql);
+        $sql[] = normalizeSql($query->sql);
     };
     Event::listen(QueryExecuted::class, $listener);
     $run();

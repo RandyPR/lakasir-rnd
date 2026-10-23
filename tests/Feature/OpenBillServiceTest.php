@@ -424,7 +424,7 @@ test('only a rename takes the sales lock; table, note and discount edits do not'
     $bill = obBill($this->owner, [[$this->nasi, 1]], ['customer_name' => 'Budi']);
     $statements = [];
     DB::listen(function ($query) use (&$statements) {
-        $statements[] = strtolower($query->sql);
+        $statements[] = normalizeSql($query->sql);
     });
 
     $lockQueries = function () use (&$statements): int {
@@ -482,7 +482,7 @@ test('listOpen runs the same few queries for 5 and for 30 bills', function () {
         $rows = obSvc()->listOpen($this->owner)->all();
         $log = DB::getQueryLog();
         DB::disableQueryLog();
-        $domain = array_filter($log, fn ($q) => preg_match('/open_bill|abouts|"tables"|"users"|price_units|"products"/', $q['query']));
+        $domain = array_filter($log, fn ($q) => preg_match('/open_bill|abouts|"tables"|"users"|price_units|"products"/', normalizeSql($q['query'])));
 
         return [count($rows), count($log), count($domain)];
     };

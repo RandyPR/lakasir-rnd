@@ -246,7 +246,7 @@ test('all products are read in one query ordered by id, soft-deleted ones includ
         ['product_id' => $a->id, 'qty' => 1],
         ['product_id' => $b->id, 'qty' => 1],
     ]);
-    $queries = collect(DB::getQueryLog())->pluck('query')->map(fn ($q) => strtolower($q))->all();
+    $queries = collect(DB::getQueryLog())->pluck('query')->map(fn ($q) => normalizeSql($q))->all();
     DB::connection()->disableQueryLog();
 
     expect($queries)->toHaveCount(1);

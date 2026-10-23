@@ -86,7 +86,7 @@ test('--pre passes on a fresh schema and prints the database facts', function ()
     expect($output)->toContain('HASIL: PASS');
     expect($output)->not->toContain('[FAIL]');
     expect($output)->toContain('--- Fakta database');
-    expect($output)->toContain('driver: sqlite');
+    expect($output)->toContain('driver: '.DB::getDriverName());
     expect($output)->toContain('database: ');
     expect($output)->toContain('jumlah baris sellings:');
     expect($output)->toContain('jumlah baris selling_details:');
@@ -189,7 +189,8 @@ test('--pre fails when the tables the new foreign keys point at are missing', fu
     Schema::drop('open_bill_events');
     Schema::drop('open_bill_items');
     Schema::drop('open_bills');
-    Schema::drop('price_units');
+    // cart_items and selling_details still point at price_units: MySQL only drops it without the key checks.
+    Schema::withoutForeignKeyConstraints(fn () => Schema::drop('price_units'));
 
     [$code, $output] = preflight(pre: true);
 
@@ -262,6 +263,8 @@ test('the post-migration check fails when an index is missing and says how to re
 });
 
 test('the post-migration check fails when a performance index is missing', function () {
+    // The foreign key on stocks.product_id needs an index (MySQL error 1553): before this release it had its own.
+    Schema::table('stocks', fn (Blueprint $table) => $table->index('product_id'));
     Schema::table('stocks', fn (Blueprint $table) => $table->dropIndex('stocks_pos_lookup_index'));
 
     [$code, $output] = preflight();

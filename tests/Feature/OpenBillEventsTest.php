@@ -465,7 +465,7 @@ test('line, note, discount, kitchen and void changes never touch the sales lock'
 test('creating a bill and paying one take the sales lock before they write the bill', function () {
     $statements = [];
     DB::listen(function ($query) use (&$statements) {
-        $statements[] = strtolower($query->sql);
+        $statements[] = normalizeSql($query->sql);
     });
     $index = function (string $needle, int $from = 0) use (&$statements): int|false {
         foreach ($statements as $i => $sql) {

@@ -3,6 +3,7 @@
 use App\Console\Commands\PosPreflight;
 use App\Models\Tenants\Product;
 use App\Models\Tenants\User;
+use App\Support\SafeMigration;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Schema\Blueprint;
@@ -47,6 +48,34 @@ function schemaIndexNames(string $table): array
 function schemaColumn(string $table, string $column): ?array
 {
     return collect(Schema::getColumns($table))->firstWhere('name', $column);
+}
+
+/** @return array<int, string> the columns of every foreign key on $table */
+function schemaForeignKeyColumns(string $table): array
+{
+    return array_map(fn (array $key) => implode(',', $key['columns']), Schema::getForeignKeys($table));
+}
+
+/**
+ * Drops an index the way a run that stopped before creating it left the table. MySQL refuses to drop the only index a
+ * foreign key relies on (error 1553). Such a key on a table of the performance migration existed before this release,
+ * with an index of its own, which is put back first; the create migrations add their foreign keys after their indexes,
+ * so a run that stopped before the index had not added the key either.
+ */
+function schemaLeaveOutIndex(string $migration, string $table, string $index): void
+{
+    if (! SafeMigration::isSqlite()) {
+        $column = collect(Schema::getIndexes($table))->firstWhere('name', $index)['columns'][0];
+        $foreignKey = collect(Schema::getForeignKeys($table))->first(fn (array $key) => $key['columns'] === [$column]);
+
+        if ($foreignKey !== null && ! SafeMigration::hasOtherIndexLeading($table, $column, $index)) {
+            Schema::table($table, fn (Blueprint $blueprint) => $migration === SCHEMA_RELEASE[0]
+                ? $blueprint->index($column)
+                : $blueprint->dropForeign($foreignKey['name']));
+        }
+    }
+
+    Schema::table($table, fn (Blueprint $blueprint) => $blueprint->dropIndex($index));
 }
 
 /** Runs every release migration's up() on a copy of the schema as it is now. */
@@ -404,12 +433,14 @@ test('running every release migration a second time changes nothing and throws n
 });
 
 test('each migration restores an index that a stopped run left out', function (string $migration, string $table, string $index) {
-    Schema::table($table, fn (Blueprint $blueprint) => $blueprint->dropIndex($index));
+    $foreignKeys = schemaForeignKeyColumns($table);
+    schemaLeaveOutIndex($migration, $table, $index);
     expect(Schema::hasIndex($table, $index))->toBeFalse();
 
     schemaMigration($migration)->up();
 
     expect(Schema::hasIndex($table, $index))->toBeTrue();
+    expect(schemaForeignKeyColumns($table))->toEqualCanonicalizing($foreignKeys);
 })->with([
     'perf: stocks lookup' => ['2026_10_14_000001_add_pos_performance_indexes', 'stocks', 'stocks_pos_lookup_index'],
     'perf: cart user product' => ['2026_10_14_000001_add_pos_performance_indexes', 'cart_items', 'cart_items_user_product_index'],
@@ -465,17 +496,17 @@ test('the bill tables are recreated when they are missing and the migrations are
 test('a table that exists without its indexes (a run that stopped after create) is completed', function () {
     Schema::drop('open_bill_events');
     Schema::drop('open_bill_items');
-    Schema::table('open_bills', function (Blueprint $table) {
-        $table->dropIndex('open_bills_day_number_unique');
-        $table->dropIndex('open_bills_status_day_index');
-        $table->dropIndex('open_bills_selling_id_unique');
-    });
+    $foreignKeys = schemaForeignKeyColumns('open_bills');
+    foreach (['open_bills_day_number_unique', 'open_bills_status_day_index', 'open_bills_selling_id_unique'] as $index) {
+        schemaLeaveOutIndex('2026_10_15_000002_create_open_bills_table', 'open_bills', $index);
+    }
 
     schemaMigration('2026_10_15_000002_create_open_bills_table')->up();
 
     foreach (['open_bills_day_number_unique', 'open_bills_status_day_index', 'open_bills_selling_id_unique'] as $index) {
         expect(Schema::hasIndex('open_bills', $index))->toBeTrue();
     }
+    expect(schemaForeignKeyColumns('open_bills'))->toEqualCanonicalizing($foreignKeys);
 });
 
 test('the create migrations never touch rows that already exist', function () {
@@ -532,7 +563,11 @@ test('after down() the performance migration up() works again', function () {
 test('down() on a schema where the composite index was never created does not throw', function () {
     $migration = schemaMigration('2026_10_14_000001_add_pos_performance_indexes');
     $migration->down();
-    Schema::table('stocks', fn (Blueprint $table) => $table->dropIndex('stocks_product_id_index'));
+    // Before this release SQLite had no index on stocks.product_id; MySQL had the foreign key's own, which it does not
+    // let go (error 1553), so there the plain index takes its name instead.
+    Schema::table('stocks', fn (Blueprint $table) => SafeMigration::isSqlite()
+        ? $table->dropIndex('stocks_product_id_index')
+        : $table->renameIndex('stocks_product_id_index', 'stocks_product_id_foreign'));
 
     expect(fn () => $migration->down())->not->toThrow(Throwable::class);
 });

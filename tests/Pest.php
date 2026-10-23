@@ -13,6 +13,7 @@
 
 use App\Constants\Role;
 use App\Models\Tenants\About;
+use App\Models\Tenants\Category;
 use App\Models\Tenants\User;
 use Illuminate\Support\Facades\Artisan;
 
@@ -69,10 +70,22 @@ function seedShop(): User
         'business_type' => 'Retail',
     ]);
 
-    foreach (['PermissionSeeder', 'PaymentMethodSeeder', 'CategorySeeder'] as $seeder) {
+    foreach (['PermissionSeeder', 'PaymentMethodSeeder'] as $seeder) {
         Artisan::call('db:seed', ['--class' => $seeder]);
     }
+    // What CategorySeeder does, without its TRUNCATE: on MySQL a TRUNCATE commits the test's transaction (and the
+    // seeder turns the foreign key checks off), so nothing after it would be rolled back.
+    Category::create(['name' => 'UMUM']);
     $user->assignRole(Role::admin);
 
     return $user;
+}
+
+/**
+ * A query's SQL in lower case, with MySQL's `quotes` written as SQLite's "quotes", so a test that reads the SQL runs on
+ * both databases.
+ */
+function normalizeSql(string $sql): string
+{
+    return str_replace('`', '"', strtolower($sql));
 }

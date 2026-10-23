@@ -616,7 +616,7 @@ test('the voucher period is judged on the business date, not the UTC date', func
 test('a sale line without a note does not touch the note column', function () {
     $sql = [];
     Event::listen(QueryExecuted::class, function (QueryExecuted $query) use (&$sql) {
-        $sql[] = strtolower($query->sql);
+        $sql[] = normalizeSql($query->sql);
     });
 
     hookSale($this->product);

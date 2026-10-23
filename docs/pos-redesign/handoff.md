@@ -1,13 +1,15 @@
-# Status: redesign POS / kasir (2026-10-20)
+# Status: redesign POS / kasir (2026-10-23)
 
 ## Posisi
-- Cabang `claude/project-thread-h561g4`, draft PR #3 ke `1.x`. Cabang ini juga memuat commit T1 (single tenant,
-  PR #2): merge PR #2 dulu, lalu PR #3. Jangan push ke 1.x.
+- Cabang `claude/project-thread-h561g4`, PR #3 ke `1.x`. Cabang ini juga memuat commit T1 (single tenant, PR #2):
+  merge PR #2 dulu, lalu PR #3. Jangan push ke 1.x.
 - PHP 8.4 (Herd: `$env:Path="$env:USERPROFILE\.config\herd\bin;$env:Path"`). Test: `php vendor/bin/pest`
   (SQLite `database/testing.sqlite`, jangan jalankan dua Pest bersamaan pada berkas yang sama; untuk paralel pakai DB
   privat: `New-Item database\testing_x.sqlite; $env:DB_DATABASE="database/testing_x.sqlite"`). Benchmark:
   `PERF=1 php vendor/bin/pest tests/Feature/CashierPerfTest.php`. Harness Node (`tests/Support/*.mjs`) dijalankan oleh
   `PaymentFlowTest` dan `ReceiptPartialTest`; tanpa `node` keduanya dilewati.
+- Test di MySQL, seperti CI (mysql:5.7, koneksi `testing` yang ketat): `DB_CONNECTION=testing
+  DB_DATABASE_TESTING=<db> DB_HOST=... DB_PORT=... DB_USERNAME=... DB_PASSWORD=... php vendor/bin/pest`.
 - Produksi = MySQL dengan data nyata. Deploy hanya lewat `docs/deploy-open-bill.md` (`pos:preflight --pre`, migrasi
   satu per satu dengan `--path`, `npm run build`). Jangan jalankan `php artisan migrate` biasa di produksi.
 
@@ -22,7 +24,8 @@
 3. Pembayaran baru: Tunai (Uang pas, +20.000/+50.000/+100.000 menambah, saran pintar, papan angka), non-tunai dengan
    konfirmasi, Kredit (member, jatuh tempo, uang muka). Struk, Bill sementara, tiket dapur dari satu kode cetak
    (`window.LakasirReceipt`) + Pratinjau. Nomor harian dan nama "(2)" direset tengah malam WIB.
-4. Test: 743 test Pest (1 benchmark dilewati tanpa `PERF=1`).
+4. Test: 743 test Pest, lulus di SQLite, MySQL 8.0 dan MySQL 5.7 (1 benchmark dilewati tanpa `PERF=1`; di MySQL
+   satu test lagi dilewati karena hanya untuk SQLite).
 5. Audit MySQL 8.0.46 dan 5.7.44 (Docker): ke-7 migrasi lulus, idempoten, kondisi setengah jalan diperbaiki dengan
    menjalankan ulang, preflight menolak migrasi lama yang destruktif, `down()` aman (error MySQL 1553 ditangani),
    balapan dua proses: tidak ada nomor/nama ganda, unit terakhir hanya terjual sekali, bill yang sama dibayar dua kali
@@ -34,13 +37,17 @@
    dapur; tombol "lainnya" kosong; label "Uang pas" terpotong di 320 px; chip "Melanjutkan Bill" memotong nomornya;
    setengah unit (0,5) ditolak saat bayar langsung tapi diterima lewat bill; toast "Bill tersimpan" menutupi dialog
    bayar; daftar bill kosong menampilkan ringkasan "0"; SQLite lokal "database is locked" saat ack dapur.
+7. Test di MySQL 8.0 dan 5.7 (2026-10-23): satu bug nyata, pencarian kasir dengan kata yang diawali "!" tidak
+   menemukan apa pun di MySQL 5.7 (bug `LIKE ... ESCAPE` MySQL 5.7 pada utf8mb4_unicode_ci); kata seperti itu
+   sekarang memakai "~" sebagai karakter escape. Sisanya masalah persiapan test, bukan kode kasir.
 
 ## Belum / perlu keputusan Randy
 - Pertanyaan lama yang belum dijawab: (a) topologi printer, (b) satu akun dipakai banyak perangkat,
   (c) output `php artisan migrate:status` di produksi sebelum deploy.
 - Bug lama di luar redesign: `TenantLogin::authenticate` error 500 bila login dibatasi (lebih dari 5 percobaan per
   menit), karena `parent::authenticate()` mengembalikan null. Belum diubah.
-- CI (`.github/workflows/ci.yaml`) butuh secret DB dan aset ter-build; di fork ini merah untuk semua PR.
+- CI (`.github/workflows/ci.yaml`) menjalankan semua test di MySQL 5.7 dan butuh secret repo `DB_DATABASE`,
+  `DB_USERNAME`, `DB_PASSWORD`; tanpa itu CI merah sebelum test pertama.
 - Belum diukur dengan data produksi asli di MySQL (hanya data uji 5000 produk di SQLite dan 300 produk di MySQL).
 
 ## Keputusan (jawaban Randy / default yang diterima)
@@ -70,6 +77,9 @@
 - Pest tidak mendaftarkan TestCase untuk direktori selain `Feature`/`Unit`.
 - `OpenBill::$table` adalah nama tabel; relasi meja lewat `getRelationValue('table')`.
 - File sementara (`database/testing_*.sqlite`, `demo.sqlite`) harus dihapus; `*.sqlite` di-gitignore.
+- Test yang juga harus lulus di MySQL: tanpa TRUNCATE atau DDL di seed per test (itu meng-commit transaksi test),
+  tanpa id tetap (MySQL tidak mengembalikan AUTO_INCREMENT saat rollback), SQL dibandingkan lewat `normalizeSql()`.
+  MySQL menolak menghapus indeks yang dipakai foreign key (error 1553) dan tabel yang dirujuk tabel lain.
 - Rujukan: `plan-v3.md` (bagian 13-19 mengikat), `final_contract_v3.txt`, `final_packages_v3.json`,
   `design-notes-v3.md`, `kasir-mock-v3.html`, `openbill-research.md`. Artifact mock (privat):
   https://claude.ai/artifact/XdBdV32uBHqtAyNpEQavrw
