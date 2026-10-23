@@ -284,9 +284,9 @@ class Product extends Model
     /**
      * Escapes LIKE wildcards for use with `LIKE ? ESCAPE '!'` (portable across SQLite and MySQL).
      */
-    public static function escapeLike(string $s): string
+    public static function escapeLike(string $s, string $escape = '!'): string
     {
-        return strtr($s, ['!' => '!!', '%' => '!%', '_' => '!_']);
+        return strtr($s, [$escape => $escape.$escape, '%' => $escape.'%', '_' => $escape.'_']);
     }
 
     /**
@@ -301,16 +301,19 @@ class Product extends Model
             return $builder;
         }
 
-        $like = '%'.static::escapeLike($term).'%';
+        // MySQL 5.7 (utf8mb4_unicode_ci) matches nothing when the leading % is followed by an escaped escape
+        // character, so a term that starts with "!" is escaped with "~" instead.
+        $escape = str_starts_with($term, '!') ? '~' : '!';
+        $like = '%'.static::escapeLike($term, $escape).'%';
 
-        return $builder->where(function (Builder $query) use ($like) {
-            $query->whereRaw("products.name LIKE ? ESCAPE '!'", [$like])
-                ->orWhereRaw("products.sku LIKE ? ESCAPE '!'", [$like])
-                ->orWhereExists(function ($sub) use ($like) {
+        return $builder->where(function (Builder $query) use ($like, $escape) {
+            $query->whereRaw("products.name LIKE ? ESCAPE '{$escape}'", [$like])
+                ->orWhereRaw("products.sku LIKE ? ESCAPE '{$escape}'", [$like])
+                ->orWhereExists(function ($sub) use ($like, $escape) {
                     $sub->selectRaw('1')->from('barcodes')
                         ->whereColumn('barcodes.product_id', 'products.id')
                         ->where('barcodes.is_active', true)
-                        ->whereRaw("barcodes.code LIKE ? ESCAPE '!'", [$like]);
+                        ->whereRaw("barcodes.code LIKE ? ESCAPE '{$escape}'", [$like]);
                 });
         });
     }

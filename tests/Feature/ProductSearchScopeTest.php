@@ -114,6 +114,15 @@ test('the escape character itself is a plain character', function () {
     expect(searchNames('w! m'))->toBe(['Wow! Murah']);
 });
 
+test('a term that starts with the escape character is found on MySQL 5.7 too, also with a ~ in it', function () {
+    searchProduct('!Promo ~ hemat', 'P-1');
+    searchProduct('Promo hemat', 'P-2');
+
+    expect(searchNames('!promo'))->toBe(['!Promo ~ hemat']);
+    expect(searchNames('!promo ~'))->toBe(['!Promo ~ hemat']);
+    expect(searchNames('~'))->toBe(['!Promo ~ hemat']);
+});
+
 test('quotes and sql fragments in the term are bound, not executed', function () {
     searchProduct('Normal', 'N-1');
 
@@ -124,6 +133,7 @@ test('quotes and sql fragments in the term are bound, not executed', function ()
 
 test('escapeLike escapes percent, underscore and the escape character', function () {
     expect(Product::escapeLike('50%_off!'))->toBe('50!%!_off!!');
+    expect(Product::escapeLike('!50%_off~', '~'))->toBe('!50~%~_off~~');
     expect(Product::escapeLike('plain'))->toBe('plain');
     expect(Product::escapeLike(''))->toBe('');
 });
