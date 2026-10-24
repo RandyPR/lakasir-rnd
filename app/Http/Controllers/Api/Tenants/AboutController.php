@@ -20,7 +20,7 @@ class AboutController extends Controller
 
     public function update(Request $request, AboutService $aboutService)
     {
-        $this->validate($request, [
+        $data = $this->validate($request, [
             'shop_name' => ['nullable', 'string'],
             'shop_location' => ['nullable', 'string'],
             'business_type' => ['required', 'in:retail,wholesale,fnb,fashion,pharmacy,other'],
@@ -29,7 +29,7 @@ class AboutController extends Controller
             'uploaded_file_id' => ['nullable', 'integer', 'exists:uploaded_files,id'],
         ]);
 
-        $aboutService->createOrUpdate($request->all());
+        $aboutService->createOrUpdate($data);
 
         Setting::set('currency', $request->currency ?? 'IDR');
 

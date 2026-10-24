@@ -99,18 +99,23 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     });
 
     Route::group(['prefix' => 'about'], function () {
+        // The shop name and address are on every receipt, so reading stays open to every signed-in user.
         Route::get('/', [AboutController::class, 'index'])
             ->name('about');
         Route::put('/', [AboutController::class, 'update'])
+            ->can('update about')
             ->name('about.update');
     });
 
     Route::group(['prefix' => 'transaction'], function () {
         Route::get('/dashboard/total-revenue', [DashboardController::class, 'totalRevenue'])
+            ->can('read revenue overview')
             ->name('transaction.dashboard.total-revenue');
         Route::get('/dashboard/total-gross-profit', [DashboardController::class, 'totalGrossProfit'])
+            ->can('read revenue overview')
             ->name('transaction.dashboard.total-gross-profit');
         Route::get('/dashboard/total-sales', [DashboardController::class, 'totalSales'])
+            ->can('read sales overview')
             ->name('transaction.dashboard.total-sales');
 
         Route::get('/selling', [SellingController::class, 'index'])->can('read selling');
@@ -123,7 +128,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
         });
     });
 
-    // @TODO: this is should be using can permission
+    // Any signed-in user may read a setting (the cashier needs them); changing one is checked per key in the controller.
     Route::get('setting/{key}', [App\Http\Controllers\Api\Tenants\SettingController::class, 'show'])
         ->name('setting.show');
     Route::post('setting', [App\Http\Controllers\Api\Tenants\SettingController::class, 'store'])

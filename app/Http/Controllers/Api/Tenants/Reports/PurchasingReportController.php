@@ -10,12 +10,12 @@ class PurchasingReportController
 {
     public function __invoke(Request $request, PurchasingReportService $service)
     {
-        $request->validate([
+        $filters = $request->validate([
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
         ]);
 
-        $reportData = $service->generate($request->all());
+        $reportData = $service->generate($filters);
         $reports = $reportData['reports'];
         $footer = $reportData['footer'];
         $header = $reportData['header'];

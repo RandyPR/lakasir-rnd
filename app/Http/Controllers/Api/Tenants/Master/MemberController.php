@@ -10,6 +10,9 @@ use Spatie\QueryBuilder\QueryBuilder;
 
 class MemberController extends Controller
 {
+    /** The columns a client may set; `guarded` only protects `id`, so the request is never filled whole. */
+    private const COLUMNS = ['name', 'code', 'address', 'email', 'identity_type', 'identity_number', 'joined_date'];
+
     public function index()
     {
         $members = QueryBuilder::for(Member::class)
@@ -24,7 +27,7 @@ class MemberController extends Controller
     {
         $this->validate($request, $this->rules(new Member));
         $member = new Member();
-        $member->fill($request->all());
+        $member->fill($request->only(self::COLUMNS));
         $member->save();
 
         return $this->success([], "success creating items");
@@ -38,7 +41,7 @@ class MemberController extends Controller
     public function update(Request $request, Member $member)
     {
         $this->validate($request, $this->rules($member));
-        $member->fill($request->all());
+        $member->fill($request->only(self::COLUMNS));
         $member->update();
 
         return $this->success([], "success updating items");

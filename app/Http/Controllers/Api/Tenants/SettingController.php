@@ -9,8 +9,30 @@ use Illuminate\Validation\Rule;
 
 class SettingController extends Controller
 {
+    /**
+     * What it takes to change each setting in config('setting.key'): the permissions the dedicated routes and the web
+     * settings page already use. Reading is open to every signed-in user, the cashier needs currency, tax and the
+     * selling method.
+     */
+    public const WRITE_PERMISSION = [
+        'currency' => 'update currency',
+        'selling_method' => 'set selling method',
+        'cash_drawer_enabled' => 'enable cash drawer',
+        'secure_initial_price_enabled' => 'enable secure initial price',
+        'secure_initial_price_using_pin' => 'enable secure initial price',
+        'default_tax' => 'set default tax',
+        'minimum_stock_nofication' => 'set the minimum stock notification',
+    ];
+
     public function store(Request $request)
     {
+        // The permission depends on the key in the body, so it is checked before the value is looked at. An unknown
+        // key has no permission and gets the validation error below.
+        $key = $request->input('key');
+        if (is_string($key) && isset(self::WRITE_PERMISSION[$key])) {
+            $this->authorize(self::WRITE_PERMISSION[$key]);
+        }
+
         $this->validate($request, [
             'key' => [
                 'required',

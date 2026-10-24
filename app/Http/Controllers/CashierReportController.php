@@ -10,12 +10,12 @@ class CashierReportController extends Controller
 {
     public function __invoke(Request $request, CashierReportService $cashierReportService)
     {
-        $request->validate([
+        $filters = $request->validate([
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
         ]);
 
-        $reportData = $cashierReportService->generate($request->all());
+        $reportData = $cashierReportService->generate($filters);
         $reports = $reportData['reports'];
         $footer = $reportData['footer'];
         $header = $reportData['header'];

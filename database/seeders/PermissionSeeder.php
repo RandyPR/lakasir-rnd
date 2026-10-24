@@ -206,13 +206,13 @@ class PermissionSeeder extends Seeder
                         'permission' => [
                             'r',
                         ],
-                        'guard' => ['web'],
+                        'guard' => ['web', 'sanctum'],
                     ],
                     'sales overview' => [
                         'permission' => [
                             'r',
                         ],
-                        'guard' => ['web'],
+                        'guard' => ['web', 'sanctum'],
                     ],
                     'discount overview' => [
                         'permission' => [

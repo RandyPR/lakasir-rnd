@@ -24,11 +24,11 @@ class CategoryController extends Controller
 
     public function store(Request $request)
     {
-        $this->validate($request, [
+        $data = $this->validate($request, [
             'name' => 'required',
         ]);
         $category = new Category();
-        $category->fill($request->all());
+        $category->fill($data);
         $category->save();
 
         return $this->buildResponse()
@@ -45,10 +45,10 @@ class CategoryController extends Controller
 
     public function update(Request $request, Category $category)
     {
-        $this->validate($request, [
+        $data = $this->validate($request, [
             'name' => 'required',
         ]);
-        $category->fill($request->all());
+        $category->fill($data);
         $category->update();
 
         return $this->buildResponse()
