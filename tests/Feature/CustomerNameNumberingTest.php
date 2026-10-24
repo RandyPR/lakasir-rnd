@@ -17,6 +17,8 @@ use function Pest\Laravel\actingAs;
 uses(RefreshDatabaseWithTenant::class);
 
 beforeEach(function () {
+    // Midday in the shop's business timezone (12:00 WIB), so the business day cannot flip while a test runs.
+    Carbon::setTestNow(Carbon::parse('2026-10-15 05:00:00', 'UTC'));
     Setting::set('selling_method', 'fifo');
     Cache::clear();
     $this->product = Product::factory()->create([
@@ -25,6 +27,10 @@ beforeEach(function () {
         'selling_price' => 25000,
         'stock' => 20,
     ]);
+});
+
+afterEach(function () {
+    Carbon::setTestNow();
 });
 
 test('customer name service formats duplicate names per day correctly', function () {
@@ -138,7 +144,7 @@ test('creating selling transactions auto-numbers duplicate customer names within
         ->assertJsonPath('data.customer_name', 'Siti');
 });
 
-test('cashier Livewire component auto formats duplicate customer names', function () {
+test('cashier keeps the typed customer name and shows the numbered name the sale will get', function () {
     \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('tenant'));
     $user = User::first();
 
@@ -152,8 +158,13 @@ test('cashier Livewire component auto formats duplicate customer names', functio
         'date' => now()->toDateString(),
     ]);
 
+    // The name is numbered when the sale is recorded (SellingService); until then the cashier only sees a hint.
     Livewire::actingAs($user)
         ->test(Cashier::class)
-        ->set('cartDetail.customer_name', 'Andi')
-        ->assertSet('cartDetail.customer_name', 'Andi (2)');
+        ->call('commitCustomerName', 'Andi')
+        ->assertSet('cartDetail.customer_name', 'Andi')
+        ->assertSet('customerNameHint', 'Andi (2)')
+        ->assertSee('Andi (2)')
+        ->call('commitCustomerName', 'Siti')
+        ->assertSet('customerNameHint', null);
 });

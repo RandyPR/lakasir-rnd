@@ -42,21 +42,6 @@ namespace App{
 	class IdeHelperAbout {}
 }
 
-namespace App\Models{
-/**
- * 
- *
- * @property-read \Illuminate\Notifications\DatabaseNotificationCollection<int, \Illuminate\Notifications\DatabaseNotification> $notifications
- * @property-read int|null $notifications_count
- * @method static \Illuminate\Database\Eloquent\Builder|Admin newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder|Admin newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder|Admin query()
- * @mixin \Eloquent
- */
-	#[\AllowDynamicProperties]
-	class IdeHelperAdmin {}
-}
-
 namespace App\Models\Tenants{
 /**
  * 
@@ -1184,38 +1169,3 @@ namespace App\Models\Tenants{
 	#[\AllowDynamicProperties]
 	class IdeHelperVoucher {}
 }
-
-namespace App{
-/**
- * 
- *
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \Stancl\Tenancy\Database\Models\Domain> $domains
- * @property-read int|null $domains_count
- * @method static \Stancl\Tenancy\Database\TenantCollection<int, static> all($columns = ['*'])
- * @method static \Stancl\Tenancy\Database\TenantCollection<int, static> get($columns = ['*'])
- * @method static \Illuminate\Database\Eloquent\Builder|Tenant newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder|Tenant newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder|Tenant query()
- * @method static \Stancl\Tenancy\Database\TenantCollection<int, static> all($columns = ['*'])
- * @method static \Stancl\Tenancy\Database\TenantCollection<int, static> get($columns = ['*'])
- * @mixin \Eloquent
- */
-	#[\AllowDynamicProperties]
-	class IdeHelperTenant {}
-}
-
-namespace App{
-/**
- * 
- *
- * @property-read \Illuminate\Notifications\DatabaseNotificationCollection<int, \Illuminate\Notifications\DatabaseNotification> $notifications
- * @property-read int|null $notifications_count
- * @method static \Illuminate\Database\Eloquent\Builder|TenantUser newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder|TenantUser newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder|TenantUser query()
- * @mixin \Eloquent
- */
-	#[\AllowDynamicProperties]
-	class IdeHelperTenantUser {}
-}
-

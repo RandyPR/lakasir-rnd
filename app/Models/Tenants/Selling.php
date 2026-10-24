@@ -2,12 +2,20 @@
 
 namespace App\Models\Tenants;
 
+use App\Services\Tenants\CustomerNameService;
+use App\Services\Tenants\DailyNumber;
+use App\Services\Tenants\NumberingLock;
+use App\Services\Tenants\OrderLineSorter;
+use App\Services\Tenants\PlainText;
+use App\Support\BusinessDay;
 use App\Traits\UseTimezoneAwareQuery;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * @mixin IdeHelperSelling
@@ -23,34 +31,58 @@ class Selling extends Model
         'formatted_daily_order_number',
     ];
 
+    protected bool $receiptLoaded = false;
+
+    /**
+     * Transient flags set by SellingService::create (not columns; they never go through fill()).
+     * numberingLocked: the caller already holds NumberingLock::acquire() as the first statement of its transaction.
+     * keepCustomerName: the name is already final ("Budi (2)", from an open bill), so do not number it again.
+     */
+    public bool $numberingLocked = false;
+
+    public bool $keepCustomerName = false;
+
     protected static function booted(): void
     {
+        // Fallback numbering for sales created outside SellingService (seeders, factories, tests).
+        // SellingService::create does the locking itself; see NumberingLock for why the order matters.
         static::creating(function (Selling $selling) {
-            $targetDate = $selling->date 
-                ? \Illuminate\Support\Carbon::parse($selling->date)->toDateString() 
-                : ($selling->created_at ? $selling->created_at->toDateString() : now()->toDateString());
+            $moment = $selling->date ?: $selling->created_at;
+            if (blank($moment)) {
+                // Same instant SellingObserver would use; fixed here so number, name and column agree.
+                $moment = $selling->date = BusinessDay::normalize(null);
+            }
+            $businessDate = BusinessDay::dateOf($moment);
 
-            if (empty($selling->daily_order_number)) {
+            $needsNumber = empty($selling->daily_order_number);
+            $needsName = ! empty($selling->customer_name) && ! $selling->keepCustomerName;
+
+            if (($needsNumber || $needsName) && ! $selling->numberingLocked && DB::transactionLevel() > 0) {
+                NumberingLock::acquire();
+            }
+
+            if ($needsNumber) {
                 try {
-                    $max = static::whereDate('date', $targetDate)->max('daily_order_number');
-                    if (! $max) {
-                        $max = static::whereDate('created_at', $targetDate)->max('daily_order_number');
+                    $selling->daily_order_number = DailyNumber::next($businessDate);
+                } catch (Throwable $e) {
+                    if (NumberingLock::isContention($e)) {
+                        throw $e;
                     }
-
-                    $selling->daily_order_number = ($max ?? 0) + 1;
-                } catch (\Throwable $e) {
                     unset($selling->daily_order_number);
                 }
             }
 
-            if (! empty($selling->customer_name)) {
+            if ($needsName) {
                 try {
-                    $selling->customer_name = \App\Services\Tenants\CustomerNameService::generateDailyCustomerName(
+                    $selling->customer_name = CustomerNameService::generateDailyCustomerName(
                         $selling->customer_name,
-                        $targetDate,
+                        $businessDate,
                         $selling->id ?? null
                     );
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
+                    if (NumberingLock::isContention($e)) {
+                        throw $e;
+                    }
                 }
             }
         });
@@ -59,6 +91,41 @@ class Selling extends Model
     public function sellingDetails()
     {
         return $this->hasMany(SellingDetail::class);
+    }
+
+    /**
+     * Loads everything the receipt and the sale detail page need, with the lines already ordered by
+     * category and product name. Idempotent: a second call neither queries nor sorts again.
+     * Products are loaded with soft-deleted ones included, so an old sale still prints after a product is removed.
+     */
+    public function loadForReceipt(): static
+    {
+        if ($this->receiptLoaded) {
+            return $this;
+        }
+
+        $this->load([
+            'sellingDetails.product' => fn ($query) => $query->withTrashed(),
+            'sellingDetails.product.category',
+            'paymentMethod',
+            'user',
+            'member',
+            'table',
+        ]);
+
+        $this->setRelation('sellingDetails', OrderLineSorter::sort($this->sellingDetails));
+        $this->append('note_plain');
+        $this->receiptLoaded = true;
+
+        return $this;
+    }
+
+    /**
+     * The order note as plain text (legacy notes were HTML from a rich editor).
+     */
+    public function notePlain(): Attribute
+    {
+        return Attribute::make(get: fn () => PlainText::fromHtml($this->note));
     }
 
     public function paymentMethod()

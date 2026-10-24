@@ -2,6 +2,7 @@
 
 namespace App\Models\Tenants;
 
+use App\Models\Tenants\Concerns\HasOrderLine;
 use Filament\Facades\Filament;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -16,7 +17,7 @@ use Illuminate\Support\Str;
  */
 class CartItem extends Model
 {
-    use HasFactory;
+    use HasFactory, HasOrderLine;
 
     protected $fillable = [
         'qty',
@@ -24,6 +25,7 @@ class CartItem extends Model
         'user_id',
         'product_id',
         'price_unit_id',
+        'note',
     ];
 
     protected $appends = ['price_format_money', 'discount_price_format', 'final_price_format'];

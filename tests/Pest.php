@@ -11,9 +11,16 @@
 |
 */
 
-use App\Services\RegisterTenant;
-use App\Tenant;
-use Illuminate\Support\Facades\DB;
+use App\Constants\Role;
+use App\Models\Tenants\About;
+use App\Models\Tenants\Category;
+use App\Models\Tenants\User;
+use Illuminate\Support\Facades\Artisan;
+
+// Tests run against their own SQLite file, never the dev database.
+if (! file_exists(__DIR__.'/../database/testing.sqlite')) {
+    touch(__DIR__.'/../database/testing.sqlite');
+}
 
 uses(
     Tests\TestCase::class,
@@ -46,21 +53,39 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function mockTenant(): Tenant
+/**
+ * Seed the single shop (owner, shop profile, permissions, payment methods, categories).
+ * Called inside the test transaction, so everything is rolled back after each test.
+ */
+function seedShop(): User
 {
-    DB::statement('DROP DATABASE IF EXISTS lakasir_toko_testing');
-    Tenant::where('id', 'toko_testing')->delete();
-    $data = [
-        'name' => 'toko_testing',
-        'domain' => 'toko_testing.'.config('tenancy.central_domains')[0],
+    $user = User::create([
         'email' => 'toko_testing@mail.com',
-        'password' => 'password',
-        'full_name' => 'Toko Testing',
+        'password' => bcrypt('password'),
+        'is_owner' => true,
+    ]);
+
+    About::create([
         'shop_name' => 'Toko Testing',
         'business_type' => 'Retail',
-    ];
-    $sRegisterTenant = new RegisterTenant();
-    $tenant = $sRegisterTenant->create($data);
+    ]);
 
-    return $tenant;
+    foreach (['PermissionSeeder', 'PaymentMethodSeeder'] as $seeder) {
+        Artisan::call('db:seed', ['--class' => $seeder]);
+    }
+    // What CategorySeeder does, without its TRUNCATE: on MySQL a TRUNCATE commits the test's transaction (and the
+    // seeder turns the foreign key checks off), so nothing after it would be rolled back.
+    Category::create(['name' => 'UMUM']);
+    $user->assignRole(Role::admin);
+
+    return $user;
+}
+
+/**
+ * A query's SQL in lower case, with MySQL's `quotes` written as SQLite's "quotes", so a test that reads the SQL runs on
+ * both databases.
+ */
+function normalizeSql(string $sql): string
+{
+    return str_replace('`', '"', strtolower($sql));
 }

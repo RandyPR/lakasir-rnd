@@ -41,6 +41,9 @@ return [
             'database' => env('DB_DATABASE', database_path('database.sqlite')),
             'prefix' => '',
             'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
+            // Wait for a write lock instead of failing at once ("database is locked"): the cashier sends a few requests
+            // close together (a kitchen acknowledgement, the poll, the session). Local SQLite only; MySQL waits anyway.
+            'busy_timeout' => env('DB_BUSY_TIMEOUT', 5000),
         ],
 
         'mysql' => [

@@ -26,6 +26,12 @@ class AssignProduct
     private function assignTheProducts(Selling $selling, array $data)
     {
         foreach ($data['products'] as $productRequest) {
+            // A sale without a note must never touch selling_details.note: the column may not exist yet
+            // while the migration of a partial deploy is pending.
+            if (blank($productRequest['note'] ?? null)) {
+                unset($productRequest['note']);
+            }
+
             /** @var ?PriceUnit $priceUnit */
             $priceUnit = null;
             if (isset($productRequest['price_unit_id']) && $productRequest['price_unit_id'] != null) {

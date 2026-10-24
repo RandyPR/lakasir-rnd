@@ -53,7 +53,7 @@
    * edit the env based on your local configuration
    * `composer install`
    * `php artisan key:generate`
-   * `php artisan migrate --path=database/migrations/tenant --seed`
+   * `php artisan migrate --seed`
    * `php artisan filament:assets`
    * `php artisan livewire:publish --assets`
 5. Javascript:
@@ -61,10 +61,10 @@
   * `npm run build or npm run dev`
 6. Create the user using `php artisan app:create-user`
 
-### Local development with Laravel Herd (Windows, single tenant)
+### Local development with Laravel Herd (Windows)
 1. Park the project folder in Herd so it is served at `http://lakasir-rnd.test` and make sure the site uses PHP 8.4 (`composer.json` requires `^8.4`). Check with `herd isolated` and `php -v` (Herd's `php` first in PATH).
-2. `cp .env.herd.example .env`, create the MySQL database named in `DB_DATABASE`, then `composer install`, `php artisan key:generate`, `php artisan migrate --path=database/migrations/tenant --seed`.
-3. Tests: `php vendor/bin/pest` (slow: each test provisions a tenant database; run a single file while iterating).
+2. `cp .env.herd.example .env`, create the empty SQLite file (`New-Item database/database.sqlite -ItemType File`), then `composer install`, `php artisan key:generate`, `php artisan migrate --seed`.
+3. Tests: `php vendor/bin/pest` (uses its own SQLite file `database/testing.sqlite`, created on first run; run a single file while iterating).
 4. Optional code graph for AI assistants: `pip install graphifyy` then `graphify update .` (see AGENTS.md).
 
 ## Usage

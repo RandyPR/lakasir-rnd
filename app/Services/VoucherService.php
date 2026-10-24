@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Models\Tenants\Voucher;
+use App\Support\BusinessDay;
 use Exception;
+use Illuminate\Support\Carbon;
 
 class VoucherService
 {
@@ -13,7 +15,8 @@ class VoucherService
 
     public function applyable(string $code, float $price): ?VoucherService
     {
-        $today = today();
+        // The voucher period is in business days, not UTC days.
+        $today = Carbon::parse(BusinessDay::today());
         /** @var Voucher $voucher */
         $voucher = Voucher::whereCode($code)
             ->first();

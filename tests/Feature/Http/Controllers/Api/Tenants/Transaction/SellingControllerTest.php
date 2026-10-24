@@ -4,6 +4,7 @@ use App\Constants\VoucherType;
 use App\Events\RecalculateEvent;
 use App\Models\Tenants\CashDrawer;
 use App\Models\Tenants\Member;
+use App\Models\Tenants\PaymentMethod;
 use App\Models\Tenants\Product;
 use App\Models\Tenants\Setting;
 use App\Models\Tenants\Stock;
@@ -138,7 +139,7 @@ test('cashier cannnot create the selling transaction if the cash drawer enabled 
 test('cashier can create the selling transaction if the cash drawer enabled and opened', function () {
     Setting::set('cash_drawer_enabled', true);
     $user = User::first();
-    CashDrawer::create([
+    $cashDrawer = CashDrawer::create([
         'opened_by' => $user->id,
         'cash' => 0,
     ]);
@@ -158,7 +159,7 @@ test('cashier can create the selling transaction if the cash drawer enabled and 
         ->assertJsonPath('message', 'success create selling');
 
     $this->assertDatabaseHas('sellings', [
-        'cash_drawer_id' => 1,
+        'cash_drawer_id' => $cashDrawer->id,
     ]);
 });
 
@@ -181,7 +182,7 @@ test('cashier can create the sellings transaction with normal selling method wit
         ->assertJsonPath('message', 'success create selling');
 
     $this->assertDatabaseHas('sellings', [
-        'payment_method_id' => 1,
+        'payment_method_id' => PaymentMethod::where('name', 'Cash')->value('id'),
     ]);
 });
 
@@ -210,7 +211,7 @@ test('cashier can create the sellings transaction with normal selling method wit
         ->assertJsonPath('message', 'success create selling');
 
     $this->assertDatabaseHas('sellings', [
-        'payment_method_id' => 1,
+        'payment_method_id' => PaymentMethod::where('name', 'Cash')->value('id'),
     ]);
 });
 
@@ -239,7 +240,7 @@ test('cashier can create the sellings transaction with normal selling method wit
         ->assertJsonPath('message', 'success create selling');
 
     $this->assertDatabaseHas('sellings', [
-        'payment_method_id' => 1,
+        'payment_method_id' => PaymentMethod::where('name', 'Cash')->value('id'),
     ]);
 });
 

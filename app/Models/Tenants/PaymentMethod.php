@@ -23,6 +23,25 @@ class PaymentMethod extends Model
         'is_wallet' => 'boolean',
     ];
 
+    /**
+     * What a payment with this method means, from the flags only (never from the name):
+     * credit wins over cash, cash needs a pure cash method, everything else (wallet, debit, ...) is paid exactly.
+     *
+     * @return 'credit'|'cash'|'exact'
+     */
+    public function kind(): string
+    {
+        if ($this->is_credit) {
+            return 'credit';
+        }
+
+        if ($this->is_cash && ! $this->is_wallet && ! $this->is_debit) {
+            return 'cash';
+        }
+
+        return 'exact';
+    }
+
     public function icon(): Attribute
     {
         return Attribute::make(

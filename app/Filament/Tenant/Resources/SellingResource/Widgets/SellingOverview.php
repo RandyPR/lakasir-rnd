@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Resources\SellingResource\Widgets;
 use App\Models\Tenants\Profile;
 use App\Models\Tenants\Selling;
 use App\Models\Tenants\SellingDetail;
+use App\Support\BusinessDay;
 use Filament\Widgets\Concerns\InteractsWithPageFilters;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
@@ -55,13 +56,13 @@ class SellingOverview extends BaseWidget
 
     private function getSalesToday()
     {
-        $carbon = now(Profile::get()->timezone);
-        $today = $carbon->startOfDay()->format('Y-m-d H:i:s e');
-        $startDate = Carbon::parse($today)->setTimezone(Profile::get()->timezone ?? 'UTC');
+        // Same business day as the order numbers (config pos.business_timezone), not the user's profile timezone.
+        [$start, $end] = BusinessDay::range();
 
-        $salesToday = Selling::whereDate('date', $startDate)->count();
-
-        return $salesToday;
+        return Selling::query()
+            ->where('date', '>=', $start->format('Y-m-d H:i:s'))
+            ->where('date', '<', $end->format('Y-m-d H:i:s'))
+            ->count();
     }
 
     private function getTotalRevenue()

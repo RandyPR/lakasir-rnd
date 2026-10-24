@@ -23,8 +23,8 @@ class VoucherFactory extends Factory
             'type' => VoucherType::flat,
             'nominal' => 2000,
             'minimal_buying' => 20000,
-            'start_date' => now(),
-            'expired' => now()->addDays(10),
+            'start_date' => now()->toDateString(),
+            'expired' => now()->addDays(10)->toDateString(),
             'kuota' => 20,
         ];
     }

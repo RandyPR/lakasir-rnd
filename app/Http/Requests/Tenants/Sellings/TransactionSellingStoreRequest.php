@@ -68,12 +68,13 @@ class TransactionSellingStoreRequest extends FormRequest
             'products.*.product_id' => ['required', 'exists:products,id'],
             'products.*.price' => ['required_if:friend_price,true', 'numeric'],
             'products.*.discount_price' => ['required_if:friend_price,true', 'numeric'],
+            'products.*.note' => ['nullable', 'string', 'max:255'],
             'products.*.qty' => ['required', 'numeric', 'min:1', new CheckProductStock],
         ];
     }
 
     public function store(): Selling
     {
-        return $this->sellingService->create($this->all());
+        return $this->sellingService->create($this->all(), ['verify_stock' => true]);
     }
 }

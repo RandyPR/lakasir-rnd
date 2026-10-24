@@ -4,6 +4,7 @@ use App\Filament\Tenant\Pages\Printer;
 use App\Models\Tenants\Product;
 use App\Models\Tenants\Setting;
 use App\Models\Tenants\User;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Tests\RefreshDatabaseWithTenant;
 
@@ -12,6 +13,8 @@ use function Pest\Laravel\actingAs;
 uses(RefreshDatabaseWithTenant::class);
 
 beforeEach(function () {
+    // Midday in the shop's business timezone (12:00 WIB), so the business day cannot flip while a test runs.
+    Carbon::setTestNow(Carbon::parse('2026-10-15 05:00:00', 'UTC'));
     Setting::set('selling_method', 'fifo');
     Cache::clear();
     $this->product = Product::factory()->create([
@@ -20,6 +23,10 @@ beforeEach(function () {
         'selling_price' => 25000,
         'stock' => 20,
     ]);
+});
+
+afterEach(function () {
+    Carbon::setTestNow();
 });
 
 test('cashier can create selling transaction with customer_name', function () {
