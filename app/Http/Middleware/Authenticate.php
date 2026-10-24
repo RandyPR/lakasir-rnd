@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use Filament\Facades\Filament;
 use Illuminate\Auth\Middleware\Authenticate as Middleware;
 
 class Authenticate extends Middleware
@@ -15,7 +16,8 @@ class Authenticate extends Middleware
     protected function redirectTo($request)
     {
         if (! $request->expectsJson()) {
-            return route('login');
+            // The route named `login` is the API's POST /api/auth/login, so a browser sent there gets a 405.
+            return Filament::getPanel('tenant')->getLoginUrl();
         }
     }
 }

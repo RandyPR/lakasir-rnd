@@ -10,8 +10,13 @@ class RegisterFCMTokenController extends Controller
 {
     public function __invoke(Request $request)
     {
+        // Only the token: `is_owner`, `email` and `password` are fillable on User too.
+        $data = $request->validate([
+            'fcm_token' => ['nullable', 'string', 'max:255'],
+        ]);
+
         $user = User::find(auth()->id());
-        $user->fill($request->all());
+        $user->fill($data);
         $user->save();
 
         return $this->success([]);

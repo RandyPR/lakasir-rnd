@@ -10,12 +10,12 @@ class SellingReportController
 {
     public function __invoke(Request $request, SellingReportService $sellingReportService)
     {
-        $request->validate([
+        $filters = $request->validate([
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
         ]);
 
-        $reportData = $sellingReportService->generate($request->all());
+        $reportData = $sellingReportService->generate($filters);
         $reports = $reportData['reports'];
         $footer = $reportData['footer'];
         $header = $reportData['header'];

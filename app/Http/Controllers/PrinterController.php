@@ -17,14 +17,14 @@ class PrinterController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
+        $data = $request->validate([
             'name' => 'required',
             'ip_address' => 'required',
             'port' => 'nullable',
             'driver' => 'required',
         ]);
 
-        Printer::create($request->all());
+        Printer::create($data);
 
         return $this->buildResponse()
             ->setMessage('Data saved successfully')
@@ -33,14 +33,14 @@ class PrinterController extends Controller
 
     public function update(Request $request, Printer $printer)
     {
-        $request->validate([
+        $data = $request->validate([
             'name' => 'required',
             'ip_address' => 'required',
             'port' => 'nullable',
             'driver' => 'required',
         ]);
 
-        $printer->update($request->all());
+        $printer->update($data);
 
         return $this->buildResponse()
             ->setMessage('Data updated successfully')
