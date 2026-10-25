@@ -1,6 +1,6 @@
 # Panduan rilis Open Bill (untuk Randy)
 
-Panduan ini untuk memasang fitur Open Bill (bill sementara, tiket dapur, pembayaran baru, harga per item, hari bisnis WIB) ke toko yang SUDAH berjalan di MySQL dengan data asli. Kerjakan berurutan. Bila ragu di langkah mana pun: BERHENTI, jangan lanjut, kirim keluaran perintah terakhir kepada pengembang.
+Panduan ini untuk memasang fitur Open Bill (bill sementara, tiket dapur, pembayaran baru, harga per item, hari bisnis WIB) ke toko yang SUDAH berjalan di MySQL atau MariaDB dengan data asli. Produksi Randy memakai MariaDB 10.11.19 (terlihat di kepala berkas dump 2026-10-24); urutan di bawah sudah dicoba di salinan MariaDB 10.11 dan MySQL 8.0 dari dump itu. Kerjakan berurutan. Bila ragu di langkah mana pun: BERHENTI, jangan lanjut, kirim keluaran perintah terakhir kepada pengembang.
 
 Aturan emas:
 
@@ -32,13 +32,17 @@ Alasannya: `php artisan migrate` polos menjalankan SEMUA migrasi yang berstatus 
    mysqldump --single-transaction --routines --triggers -u USER -p NAMADB > backup-AAAA-BB-HH.sql
    ```
 
+   (Di MariaDB `mariadb-dump` dengan opsi yang sama juga boleh.)
+
    Lakukan SEBELUM melihat `migrate:status`. Salin berkasnya ke tempat lain. Lalu PULIHKAN ke database kosong (scratch) di server yang zona waktunya sama dan jalankan `SELECT COUNT(*) FROM sellings;` di sana. Cadangan yang belum pernah dipulihkan bukan cadangan. (Memulihkan ke server berzona waktu lain menggeser `created_at` bertipe TIMESTAMP terhadap `date` bertipe DATETIME; latihan pemulihan di server yang zonanya sama.)
 
 2. Empat perintah SQL fakta (baca-saja). Kirim hasilnya kepada pengembang:
 
    ```sql
-   SELECT VERSION(), @@system_time_zone, @@global.time_zone, @@transaction_isolation,
+   SELECT VERSION(), @@system_time_zone, @@global.time_zone,
           @@innodb_lock_wait_timeout, @@innodb_default_row_format, @@sql_mode;
+
+   SHOW VARIABLES LIKE '%isolation%';
 
    SELECT TABLE_NAME, ENGINE, ROW_FORMAT FROM information_schema.TABLES
    WHERE TABLE_SCHEMA = DATABASE() AND (ENGINE <> 'InnoDB' OR ROW_FORMAT NOT IN ('Dynamic','Compressed'));
@@ -48,6 +52,8 @@ Alasannya: `php artisan migrate` polos menjalankan SEMUA migrasi yang berstatus 
    SELECT COUNT(*) FROM selling_details;
    SELECT MAX(id) FROM sellings;
    ```
+
+   `SHOW VARIABLES LIKE '%isolation%'` dipakai karena nama variabelnya berbeda: MySQL 8 `transaction_isolation`, MariaDB 10.11 `tx_isolation`. Jangan menulis `@@transaction_isolation` di MariaDB 10.11: galat "Unknown system variable". Dari `php artisan pos:preflight` baris `@@transaction_isolation` di MariaDB 10.11 tertulis "(tidak tersedia di versi ini)"; itu normal, bukan kegagalan.
 
    Catat juga: isi `CACHE_DRIVER` di `.env` produksi, nama database (`DB_DATABASE`), dan commit yang sedang berjalan (`git rev-parse HEAD`).
 
@@ -69,6 +75,14 @@ Alasannya: `php artisan migrate` polos menjalankan SEMUA migrasi yang berstatus 
 ## Langkah 2: pasang kode (belum menjalankan migrasi)
 
 6. `git pull` atau unggah kode, `composer install --no-dev`, lalu pasang hasil `npm run build` (`public/build`).
+
+   Segera sesudah `composer install`, SEBELUM menjalankan perintah artisan apa pun, hapus cache bootstrap lama:
+
+   ```
+   rm -f bootstrap/cache/config.php bootstrap/cache/routes-*.php bootstrap/cache/events.php
+   ```
+
+   Alasannya: rilis penghapusan tenancy (T1) mengeluarkan `App\Providers\TenancyServiceProvider` dari `config/app.php`. Bila server ini pernah menjalankan `php artisan config:cache` atau `php artisan optimize`, cache lama masih menyebut kelas itu dan SETIAP perintah artisan, termasuk `pos:preflight`, gagal dengan "Class ... not found". Menghapus berkas cache itu aman (Laravel membuatnya lagi bila diminta).
 
 ## Langkah 3: GERBANG (wajib lulus)
 
@@ -115,7 +129,7 @@ Alasannya: `php artisan migrate` polos menjalankan SEMUA migrasi yang berstatus 
 
 ## Bila satu migrasi gagal di tengah jalan
 
-DDL MySQL tidak transaksional: perubahan yang sudah terjadi sebelum kegagalan tetap ada. Karena itu setiap pernyataan di migrasi ini diperiksa dulu sebelum dijalankan, sehingga mengulang migrasi yang sama memperbaiki keadaan setengah jadi.
+DDL MySQL dan MariaDB tidak transaksional: perubahan yang sudah terjadi sebelum kegagalan tetap ada. Karena itu setiap pernyataan di migrasi ini diperiksa dulu sebelum dijalankan, sehingga mengulang migrasi yang sama memperbaiki keadaan setengah jadi.
 
 | Migrasi | Keadaan bila gagal | Aman diulang? |
 |---|---|---|
