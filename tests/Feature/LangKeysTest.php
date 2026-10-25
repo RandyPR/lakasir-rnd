@@ -2,7 +2,7 @@
 
 /*
 |--------------------------------------------------------------------------
-| Every text the cashier shows is translated
+| Every text the cashier and the dashboard show is translated
 |--------------------------------------------------------------------------
 |
 | Scans the cashier views and the classes behind them for __('...'), @lang('...') and trans('...') with a literal
@@ -25,6 +25,13 @@ if (! function_exists('langKeysSources')) {
             'app/Models/Tenants/OpenBill.php',
             'app/Models/Tenants/OpenBillItem.php',
             'app/Models/Tenants/OpenBillEvent.php',
+            'app/Filament/Tenant/Pages/Dashboard.php',
+            'app/Filament/Tenant/Widgets/BestSellingProduct.php',
+            'app/Filament/Tenant/Widgets/ExpiredProduct.php',
+            'app/Filament/Tenant/Widgets/SalesChart.php',
+            'app/Filament/Tenant/Resources/SellingResource/Widgets/SellingOverview.php',
+            'app/Filament/Tenant/Widgets/SalesPeriodOverview.php',
+            'app/Support/SalesPeriod.php',
         ];
 
         foreach ([

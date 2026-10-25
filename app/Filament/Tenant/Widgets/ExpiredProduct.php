@@ -9,9 +9,14 @@ use Filament\Widgets\TableWidget as BaseWidget;
 
 class ExpiredProduct extends BaseWidget
 {
+    protected static ?int $sort = 30;
+
+    protected int|string|array $columnSpan = 1;
+
     public function table(Table $table): Table
     {
         return $table
+            ->heading(__('Nearest expired products'))
             ->query(
                 Product::nearestExpiredProduct()
             )
