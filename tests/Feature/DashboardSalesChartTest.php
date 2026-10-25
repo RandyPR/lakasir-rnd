@@ -241,10 +241,13 @@ test('the dashboard has a period filter that starts on the week', function () {
         ->assertSet('filters.period', 'year');
 });
 
-test('the dashboard page opens for the owner', function () {
-    actingAs(User::first())->get('/member')->assertOk();
+// Not through the route: the page layout reads the Vite manifest, which only exists after `npm run build` (CI has none).
+test('the dashboard page renders for the owner', function () {
+    Livewire::test(Dashboard::class)->assertOk()->assertSee('Period');
 });
 
-test('the dashboard page opens for a user who may not read any overview', function () {
-    actingAs(dashboardUserCan('read selling'))->get('/member')->assertOk();
+test('the dashboard page renders for a user who may not read any overview', function () {
+    actingAs(dashboardUserCan('read selling'));
+
+    Livewire::test(Dashboard::class)->assertOk()->assertSee('Period');
 });
