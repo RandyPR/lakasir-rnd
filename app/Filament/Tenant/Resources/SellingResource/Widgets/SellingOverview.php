@@ -26,7 +26,7 @@ class SellingOverview extends BaseWidget
         $discountToday = $this->getDiscountToday();
 
         return [
-            can('read revenue overview') ? Stat::make(__('Today total revenue'), $totalRevenue['total_revenue'])
+            can('read revenue overview') ? Stat::make(__('Today total profit'), $totalRevenue['total_revenue'])
                 ->descriptionIcon($totalRevenue['icon'])
                 ->description($totalRevenue['description'])
                 ->chart([$totalRevenue['yesterdayRevenue'], $totalRevenue['todayRevenue']])

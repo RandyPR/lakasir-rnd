@@ -10,7 +10,7 @@ use Illuminate\Support\Number;
 /**
  * Totals of the period chosen on the dashboard, each against the period right before it.
  * Revenue, profit and the average sale are money (permission "read revenue overview"); the number of sales
- * follows "read sales overview", the same split as Today total revenue / Sales today.
+ * follows "read sales overview", the same split as Today total profit / Sales today.
  */
 class SalesPeriodOverview extends BaseWidget
 {

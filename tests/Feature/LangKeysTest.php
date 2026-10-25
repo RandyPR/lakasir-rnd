@@ -29,6 +29,7 @@ if (! function_exists('langKeysSources')) {
             'app/Filament/Tenant/Widgets/BestSellingProduct.php',
             'app/Filament/Tenant/Widgets/ExpiredProduct.php',
             'app/Filament/Tenant/Widgets/SalesChart.php',
+            'app/Filament/Tenant/Resources/SellingResource/Widgets/SellingOverview.php',
             'app/Filament/Tenant/Widgets/SalesPeriodOverview.php',
             'app/Support/SalesPeriod.php',
         ];
