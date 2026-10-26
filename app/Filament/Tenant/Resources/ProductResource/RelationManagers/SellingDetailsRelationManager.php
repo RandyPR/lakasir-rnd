@@ -32,6 +32,7 @@ class SellingDetailsRelationManager extends RelationManager
     {
         return $table
             ->recordTitleAttribute('id')
+            ->modifyQueryUsing(fn ($query) => $query->ofSellingNotTrashed())
             ->recordUrl(function (SellingDetail $record) {
                 return SellingResource::getUrl('view', ['record' => $record->selling_id]);
             })

@@ -23,16 +23,19 @@ final class DailyNumber
     /**
      * The next number of a business day (max + 1 over sellings and open bills).
      *
+     * Sales in the trash count too: their number was printed on a ticket and a restore must not meet a second
+     * sale with the same number.
+     *
      * The caller must already hold NumberingLock::acquire(), and that must have been the first statement of the
      * transaction (see NumberingLock); otherwise two sales can read the same max.
      */
     public static function next(string $businessDate): int
     {
-        $max = BusinessDay::scopeDay(Selling::query(), 'date', $businessDate)->max('daily_order_number');
+        $max = BusinessDay::scopeDay(Selling::withTrashed(), 'date', $businessDate)->max('daily_order_number');
 
         if ($max === null) {
             // Legacy rows without a date: fall back to created_at, and only for those rows.
-            $max = BusinessDay::scopeDay(Selling::query()->whereNull('date'), 'created_at', $businessDate)
+            $max = BusinessDay::scopeDay(Selling::withTrashed()->whereNull('date'), 'created_at', $businessDate)
                 ->max('daily_order_number');
         }
 

@@ -19,6 +19,7 @@ use Filament\Tables;
 use Filament\Tables\Actions\Action;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class ReceivableResource extends Resource
 {
@@ -144,6 +145,11 @@ class ReceivableResource extends Resource
                 ReceivablePaymentsRelationManager::make(),
             ]),
         ];
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->ofSellingNotTrashed();
     }
 
     public static function getPages(): array

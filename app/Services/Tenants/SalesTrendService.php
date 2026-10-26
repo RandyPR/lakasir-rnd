@@ -95,6 +95,7 @@ class SalesTrendService
      * The best selling products of the period (same window as trend(), without the period before it).
      *
      * The id column is the product id, so Filament can key the rows of a table widget on it.
+     * This is a join, so the soft delete scope of Selling does not apply: sales in the trash are left out by hand.
      *
      * @return Builder<SellingDetail>
      */
@@ -106,6 +107,7 @@ class SalesTrendService
             ->join('sellings', 'sellings.id', '=', 'selling_details.selling_id')
             ->join('products', 'products.id', '=', 'selling_details.product_id')
             ->where('sellings.is_paid', true)
+            ->whereNull('sellings.deleted_at')
             ->where('sellings.date', '>=', $start)
             ->where('sellings.date', '<', $end)
             ->groupBy('selling_details.product_id', 'products.name')

@@ -106,14 +106,15 @@ class CustomerNameService
     }
 
     /**
-     * Names of the sales of the business day. Two index-friendly queries instead of one OR: the rows that have
-     * a date, then the legacy rows without a date (matched on created_at).
+     * Names of the sales of the business day, the ones in the trash included (a restore must not create a second
+     * "Budi (2)"). Two index-friendly queries instead of one OR: the rows that have a date, then the legacy rows
+     * without a date (matched on created_at).
      *
      * @return Collection<int, string>
      */
     private static function sellingNames(string $businessDate, ?int $excludeSellingId): Collection
     {
-        $base = fn () => Selling::query()
+        $base = fn () => Selling::withTrashed()
             ->whereNotNull('customer_name')
             ->where('customer_name', '!=', '')
             ->when($excludeSellingId, fn ($q) => $q->where('id', '!=', $excludeSellingId));

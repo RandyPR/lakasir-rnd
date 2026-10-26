@@ -29,6 +29,14 @@ class PosPreflight extends Command
         '2026_10_15_000006_add_date_index_to_sellings_table',
     ];
 
+    /**
+     * Migrations that came after the Open Bill release and ship in the same code. Like the seven above they may be
+     * pending before migrating, and they must have run afterwards (the code needs their columns).
+     */
+    public const LATER_MIGRATIONS = [
+        '2026_10_26_000001_add_soft_deletes_to_sellings_table',
+    ];
+
     /** Optional migration: missing is only a warning (the code is correct without the index). */
     private const OPTIONAL_MIGRATION = '2026_10_15_000006_add_date_index_to_sellings_table';
 
@@ -51,6 +59,7 @@ class PosPreflight extends Command
         'open_bills' => ['open_bills_day_number_unique', 'open_bills_status_day_index', 'open_bills_selling_id_unique'],
         'open_bill_items' => ['open_bill_items_bill_product_unique'],
         'open_bill_events' => ['open_bill_events_bill_index'],
+        'sellings' => ['sellings_deleted_at_index'],
     ];
 
     /** @var array<string, array<int, string>> table => columns that must exist after migrating */
@@ -72,6 +81,7 @@ class PosPreflight extends Command
             'detail', 'created_at',
         ],
         'numbering_locks' => ['name'],
+        'sellings' => ['deleted_at', 'deleted_by', 'delete_reason'],
     ];
 
     /** @var array<int, array{0:string,1:string}> [table, column] pairs that must carry a foreign key */
@@ -143,7 +153,7 @@ class PosPreflight extends Command
         $this->checkParentEngines();
 
         $pending = $this->pendingMigrations();
-        $notAllowed = array_values(array_diff($pending, self::RELEASE_MIGRATIONS));
+        $notAllowed = array_values(array_diff($pending, self::RELEASE_MIGRATIONS, self::LATER_MIGRATIONS));
 
         if ($notAllowed !== []) {
             $this->bad('Ada migrasi Pending yang BUKAN bagian dari rilis ini ('.count($notAllowed).'). Beberapa migrasi lama menjatuhkan kolom.');
@@ -151,7 +161,7 @@ class PosPreflight extends Command
                 $this->line("       - {$name}");
             }
         } else {
-            $this->ok('Migrasi Pending hanya sebagian dari tujuh berkas rilis ini ('.($pending === [] ? 'tidak ada yang Pending' : implode(', ', $pending)).').');
+            $this->ok('Migrasi Pending hanya sebagian dari tujuh berkas rilis ini dan berkas sesudahnya ('.($pending === [] ? 'tidak ada yang Pending' : implode(', ', $pending)).').');
         }
 
         $beforeRelease = array_values(array_filter(
@@ -172,7 +182,7 @@ class PosPreflight extends Command
         }
 
         $pending = $this->pendingMigrations();
-        foreach (self::RELEASE_MIGRATIONS as $name) {
+        foreach ([...self::RELEASE_MIGRATIONS, ...self::LATER_MIGRATIONS] as $name) {
             if (! in_array($name, $pending, true)) {
                 $this->ok("Ran: {$name}");
             } elseif ($name === self::OPTIONAL_MIGRATION) {

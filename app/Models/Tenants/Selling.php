@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -22,7 +23,7 @@ use Throwable;
  */
 class Selling extends Model
 {
-    use HasFactory, UseTimezoneAwareQuery;
+    use HasFactory, SoftDeletes, UseTimezoneAwareQuery;
 
     protected $guarded = ['friend_price'];
 
@@ -173,5 +174,13 @@ class Selling extends Model
     public function table(): BelongsTo
     {
         return $this->belongsTo(Table::class);
+    }
+
+    /**
+     * Who moved the sale to the trash (only set while it is in the trash).
+     */
+    public function deletedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'deleted_by')->withTrashed();
     }
 }

@@ -5,7 +5,9 @@ namespace App\Filament\Tenant\Resources\SellingResource\Pages;
 use App\Features\PrintSellingA5;
 use App\Filament\Tenant\Resources\SellingDetailResource\RelationManagers\SellingDetailsRelationManager;
 use App\Filament\Tenant\Resources\SellingResource;
+use App\Filament\Tenant\Resources\SellingResource\SellingTrashActions;
 use App\Models\Tenants\About;
+use App\Models\Tenants\Profile;
 use App\Models\Tenants\Selling;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\ViewRecord;
@@ -24,6 +26,9 @@ class ViewSelling extends ViewRecord
     {
         parent::mount($record);
 
+        // A sale in the trash is only for people who may restore it; everyone else gets the same 404 as an unknown id.
+        abort_if($this->record->trashed() && ! SellingTrashActions::allowed(), 404);
+
         $this->getRecord();
         $this->about = About::first();
 
@@ -40,9 +45,58 @@ class ViewSelling extends ViewRecord
         return 'View '.$this->getRecord()->code;
     }
 
+    /**
+     * A sale in the trash says so, since when, by whom and why.
+     */
+    public function getSubheading(): string|Htmlable|null
+    {
+        $selling = $this->record;
+
+        if (! $selling->trashed()) {
+            return null;
+        }
+
+        $when = $selling->deleted_at->copy()->setTimezone(Profile::get()->timezone ?? 'UTC')->format('d F Y H:i');
+        $text = __('In the trash since :date by :user', [
+            'date' => $when,
+            'user' => $selling->deletedBy?->name ?? '-',
+        ]);
+
+        return $selling->delete_reason ? $text.'. '.__('Reason').': '.$selling->delete_reason : $text;
+    }
+
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('trash')
+                ->label(__('Move to trash'))
+                ->icon('heroicon-o-trash')
+                ->color('danger')
+                ->requiresConfirmation()
+                ->modalHeading(__('Move to trash'))
+                ->modalDescription(__('The stock of the items is returned. You can restore the sale from the Trash tab.'))
+                ->form(SellingTrashActions::reasonForm())
+                ->visible(fn (): bool => ! $this->record->trashed() && SellingTrashActions::allowed())
+                ->action(function (array $data): void {
+                    SellingTrashActions::trash([$this->record->getKey()], $data);
+
+                    $this->redirect(SellingResource::getUrl('index'));
+                }),
+            Action::make('restore')
+                ->label(__('Restore from trash'))
+                ->icon('heroicon-o-arrow-uturn-left')
+                ->requiresConfirmation()
+                ->modalHeading(__('Restore from trash'))
+                ->modalDescription(__('Restoring takes the stock of the items out again.'))
+                ->visible(fn (): bool => $this->record->trashed() && SellingTrashActions::allowed())
+                ->action(function (): void {
+                    $result = SellingTrashActions::restore([$this->record->getKey()]);
+
+                    // Failed: stay here, the notification says why. Done: reload so the page is no longer "in the trash".
+                    if ($result['failed'] === []) {
+                        $this->redirect(SellingResource::getUrl('view', ['record' => $this->record]));
+                    }
+                }),
             Action::make('printInvoice')
                 ->label(__('Print invoice'))
                 ->icon('heroicon-s-printer')
@@ -52,7 +106,7 @@ class ViewSelling extends ViewRecord
                     'type' => 'button',
                     'onclick' => 'window.handlePrintInvoice && window.handlePrintInvoice()',
                 ])
-                ->visible(can('can print selling') && feature(PrintSellingA5::class)),
+                ->visible(fn (): bool => ! $this->record->trashed() && can('can print selling') && feature(PrintSellingA5::class)),
             Action::make('printReceipt')
                 ->label(__('Print receipt'))
                 ->icon('heroicon-s-printer')
@@ -61,7 +115,7 @@ class ViewSelling extends ViewRecord
                     'type' => 'button',
                     'onclick' => 'window.handlePrintReceipt && window.handlePrintReceipt()',
                 ])
-                ->visible(can('can print selling')),
+                ->visible(fn (): bool => ! $this->record->trashed() && can('can print selling')),
         ];
     }
 
