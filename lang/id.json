@@ -597,5 +597,21 @@
     ":percent% :trend compared to :period": ":percent% :trend dibanding :period",
     "Best selling products": "Produk terlaris",
     "Nearest expired products": "Produk paling dekat kadaluarsa",
-    "No sales in this period": "Belum ada penjualan di periode ini"
+    "No sales in this period": "Belum ada penjualan di periode ini",
+    "Move to trash": "Pindahkan ke sampah",
+    "Trash": "Sampah",
+    "Restore from trash": "Pulihkan dari sampah",
+    "Reason (optional)": "Alasan (opsional)",
+    "Reason": "Alasan",
+    "Moved to trash": "Masuk sampah",
+    "Moved by": "Dipindahkan oleh",
+    "The stock of the items is returned. You can restore the sales from the Trash tab.": "Stok barang dikembalikan. Penjualan bisa dipulihkan dari tab Sampah.",
+    "The stock of the items is returned. You can restore the sale from the Trash tab.": "Stok barang dikembalikan. Penjualan bisa dipulihkan dari tab Sampah.",
+    "Restoring takes the stock of the items out again.": "Memulihkan akan mengurangi lagi stok barang.",
+    ":count sales moved to the trash": ":count penjualan dipindahkan ke sampah",
+    "The stock of the items is back.": "Stok barang sudah dikembalikan.",
+    ":count sales restored": ":count penjualan dipulihkan",
+    ":code was not restored": ":code tidak dipulihkan",
+    "In the trash since :date by :user": "Di sampah sejak :date oleh :user",
+    "Order #": "Order #"
 }

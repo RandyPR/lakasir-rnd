@@ -4,6 +4,7 @@ namespace App\Filament\Tenant\Resources;
 
 use App\Features\ProductInitialPrice;
 use App\Filament\Tenant\Resources\SellingResource\Pages;
+use App\Filament\Tenant\Resources\SellingResource\SellingTrashActions;
 use App\Models\Tenants\Profile;
 use App\Models\Tenants\Selling;
 use App\Models\Tenants\Setting;
@@ -11,11 +12,14 @@ use App\Models\Tenants\User;
 use App\Traits\HasTranslatableResource;
 use Filament\Forms\Components\DatePicker;
 use Filament\Resources\Resource;
+use Filament\Tables\Actions\BulkAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Carbon;
 
 class SellingResource extends Resource
@@ -96,6 +100,19 @@ class SellingResource extends Resource
                     ->sortable()
                     ->visible(feature(ProductInitialPrice::class))
                     ->money(Setting::get('currency', 'IDR')),
+                TextColumn::make('deleted_at')
+                    ->label(__('Moved to trash'))
+                    ->dateTime(timezone: Profile::get()->timezone)
+                    ->visible(fn ($livewire): bool => static::showsTrash($livewire)),
+                TextColumn::make('deletedBy.name')
+                    ->label(__('Moved by'))
+                    ->placeholder('-')
+                    ->visible(fn ($livewire): bool => static::showsTrash($livewire)),
+                TextColumn::make('delete_reason')
+                    ->label(__('Reason'))
+                    ->wrap()
+                    ->placeholder('-')
+                    ->visible(fn ($livewire): bool => static::showsTrash($livewire)),
             ])
             ->searchPlaceholder('Search (Code, User, Customer, Customer Number)')
             ->header(view('filament.tenant.resources.sellings.headers.overview', [
@@ -143,12 +160,48 @@ class SellingResource extends Resource
                             ->when($startDate && $endDate, fn (Builder $builder) => $builder->whereBetween('date', [$startDate, $endDate]));
                     }),
             ])
-            ->deferFilters();
+            ->deferFilters()
+            ->bulkActions([
+                BulkAction::make('trash')
+                    ->label(__('Move to trash'))
+                    ->icon('heroicon-o-trash')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->modalHeading(__('Move to trash'))
+                    ->modalDescription(__('The stock of the items is returned. You can restore the sales from the Trash tab.'))
+                    ->form(SellingTrashActions::reasonForm())
+                    ->visible(fn ($livewire): bool => ! static::showsTrash($livewire) && SellingTrashActions::allowed())
+                    ->action(fn (Collection $records, array $data) => SellingTrashActions::trash($records->modelKeys(), $data))
+                    ->deselectRecordsAfterCompletion(),
+                BulkAction::make('restore')
+                    ->label(__('Restore from trash'))
+                    ->icon('heroicon-o-arrow-uturn-left')
+                    ->requiresConfirmation()
+                    ->modalHeading(__('Restore from trash'))
+                    ->modalDescription(__('Restoring takes the stock of the items out again.'))
+                    ->visible(fn ($livewire): bool => static::showsTrash($livewire) && SellingTrashActions::allowed())
+                    ->action(fn (Collection $records) => SellingTrashActions::restore($records->modelKeys()))
+                    ->deselectRecordsAfterCompletion(),
+            ]);
     }
 
+    /**
+     * Whether the list is on its Trash tab (only people who may restore see that tab).
+     */
+    public static function showsTrash(mixed $livewire): bool
+    {
+        return ($livewire->activeTab ?? null) === 'trash' && SellingTrashActions::allowed();
+    }
+
+    /**
+     * The scope that hides trashed sales is lifted here so a trashed sale can still be opened from the Trash tab.
+     * ListSellings puts it back (withoutTrashed) on every list.
+     */
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->with(['member', 'user']);
+        return parent::getEloquentQuery()
+            ->withoutGlobalScopes([SoftDeletingScope::class])
+            ->with(['member', 'user']);
     }
 
     public static function getPages(): array

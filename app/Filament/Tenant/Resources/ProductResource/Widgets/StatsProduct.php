@@ -27,6 +27,7 @@ class StatsProduct extends BaseWidget
                 DB::raw('sum(price - discount_price) as price'),
                 DB::raw('sum(discount_price) as discount_price')
             )
+            ->ofSellingNotTrashed()
             ->whereProductId($product->id)->groupBy('product_id')
             ->first();
 

@@ -32,6 +32,10 @@ if (! function_exists('langKeysSources')) {
             'app/Filament/Tenant/Resources/SellingResource/Widgets/SellingOverview.php',
             'app/Filament/Tenant/Widgets/SalesPeriodOverview.php',
             'app/Support/SalesPeriod.php',
+            'app/Filament/Tenant/Resources/SellingResource.php',
+            'app/Filament/Tenant/Resources/SellingResource/SellingTrashActions.php',
+            'app/Filament/Tenant/Resources/SellingResource/Pages/ListSellings.php',
+            'app/Filament/Tenant/Resources/SellingResource/Pages/ViewSelling.php',
         ];
 
         foreach ([

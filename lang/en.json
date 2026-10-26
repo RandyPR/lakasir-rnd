@@ -582,5 +582,21 @@
     ":percent% :trend compared to :period": ":percent% :trend compared to :period",
     "Best selling products": "Best selling products",
     "Nearest expired products": "Nearest expired products",
-    "No sales in this period": "No sales in this period"
+    "No sales in this period": "No sales in this period",
+    "Move to trash": "Move to trash",
+    "Trash": "Trash",
+    "Restore from trash": "Restore from trash",
+    "Reason (optional)": "Reason (optional)",
+    "Reason": "Reason",
+    "Moved to trash": "Moved to trash",
+    "Moved by": "Moved by",
+    "The stock of the items is returned. You can restore the sales from the Trash tab.": "The stock of the items is returned. You can restore the sales from the Trash tab.",
+    "The stock of the items is returned. You can restore the sale from the Trash tab.": "The stock of the items is returned. You can restore the sale from the Trash tab.",
+    "Restoring takes the stock of the items out again.": "Restoring takes the stock of the items out again.",
+    ":count sales moved to the trash": ":count sales moved to the trash",
+    "The stock of the items is back.": "The stock of the items is back.",
+    ":count sales restored": ":count sales restored",
+    ":code was not restored": ":code was not restored",
+    "In the trash since :date by :user": "In the trash since :date by :user",
+    "Order #": "Order #"
 }

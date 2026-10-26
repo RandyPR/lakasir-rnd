@@ -14,13 +14,14 @@ class StatsReceivable extends BaseWidget
     protected function getStats(): array
     {
         $receivable = Receivable::query()
+            ->ofSellingNotTrashed()
             ->select(
                 DB::raw('SUM(total_receivable) as total_receivable'),
                 DB::raw('SUM(rest_receivable) as rest_receivable')
             )
             ->first();
         $member = Member::query()
-            ->whereHas('receivables')
+            ->whereHas('receivables', fn ($query) => $query->ofSellingNotTrashed())
             ->count();
 
         return [

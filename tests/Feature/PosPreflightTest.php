@@ -15,6 +15,7 @@ const PREFLIGHT_NOTE = '2026_10_15_000001_add_note_to_cart_items_and_selling_det
 const PREFLIGHT_BILLS = '2026_10_15_000002_create_open_bills_table';
 const PREFLIGHT_ITEMS = '2026_10_15_000003_create_open_bill_items_table';
 const PREFLIGHT_DATE_INDEX = '2026_10_15_000006_add_date_index_to_sellings_table';
+const PREFLIGHT_TRASH = '2026_10_26_000001_add_soft_deletes_to_sellings_table';
 
 /** @var array<int, string> temp directories to remove after the test */
 $GLOBALS['preflight_temp_dirs'] = [];
@@ -120,6 +121,16 @@ test('--pre passes when some of the seven were already run', function () {
     expect($code)->toBe(0);
 });
 
+test('--pre passes when the trash migration of the later release is still pending', function () {
+    preflightForget(PREFLIGHT_TRASH);
+
+    [$code, $output] = preflight(pre: true);
+
+    expect($code)->toBe(0);
+    expect($output)->toContain('HASIL: PASS');
+    expect($output)->toContain(PREFLIGHT_TRASH);
+});
+
 test('--pre fails and names a pending migration that is not part of the release', function () {
     preflightPendingFile('2026_12_01_000001_drop_something_important');
 
@@ -217,6 +228,24 @@ test('the post-migration check passes on a fully migrated schema', function () {
     expect($output)->toContain('Tabel open_bills ada.');
     expect($output)->toContain('Foreign key open_bills.table_id ada.');
     expect($output)->toContain('numbering_locks punya primary key.');
+});
+
+test('the post-migration check fails when the trash migration has not run', function () {
+    preflightForget(PREFLIGHT_TRASH);
+
+    [$code, $output] = preflight();
+
+    expect($code)->toBe(1);
+    expect($output)->toContain('Belum dijalankan: '.PREFLIGHT_TRASH);
+});
+
+test('the post-migration check fails when a trash column is missing', function () {
+    Schema::table('sellings', fn (Blueprint $table) => $table->dropColumn('delete_reason'));
+
+    [$code, $output] = preflight();
+
+    expect($code)->toBe(1);
+    expect($output)->toContain('Kolom sellings hilang: delete_reason');
 });
 
 test('the post-migration check fails when a new table is missing', function (string $table) {
@@ -365,4 +394,8 @@ test('the release list in the command matches the files on disk', function () {
         expect(file_exists(database_path("migrations/{$name}.php")))->toBeTrue();
     }
     expect(PosPreflight::RELEASE_MIGRATIONS)->toHaveCount(7);
+
+    foreach (PosPreflight::LATER_MIGRATIONS as $name) {
+        expect(file_exists(database_path("migrations/{$name}.php")))->toBeTrue();
+    }
 });

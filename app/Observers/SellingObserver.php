@@ -27,7 +27,8 @@ class SellingObserver extends AbstractObserver implements DataAwareRule
         }
         // A count, not Selling::all()->count(): loading every sale into memory on each sale does not scale.
         // The caller holds the sales lock (NumberingLock), so two sales cannot read the same count.
-        $lastCount = Selling::query()->count();
+        // Sales in the trash keep their code, so they are counted too.
+        $lastCount = Selling::withTrashed()->count();
         $selling->code = 'SELL'.Str::of($lastCount + 1)->padLeft(4, 0)->value();
         // $selling->money_changes = $selling->payed_money - $selling->total_price;
         if (Setting::get('cash_drawer_enabled', false)) {
