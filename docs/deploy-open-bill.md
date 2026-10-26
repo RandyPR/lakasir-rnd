@@ -76,13 +76,13 @@ Alasannya: `php artisan migrate` polos menjalankan SEMUA migrasi yang berstatus 
 
 6. `git pull` atau unggah kode, `composer install --no-dev`, lalu pasang hasil `npm run build` (`public/build`).
 
-   Segera sesudah `composer install`, SEBELUM menjalankan perintah artisan apa pun, hapus cache bootstrap lama:
+   Sesudah `composer install` selesai dan SEBELUM perintah artisan pertama yang kamu ketik sendiri, hapus cache bootstrap lama:
 
    ```
    rm -f bootstrap/cache/config.php bootstrap/cache/routes-*.php bootstrap/cache/events.php
    ```
 
-   Alasannya: rilis penghapusan tenancy (T1) mengeluarkan `App\Providers\TenancyServiceProvider` dari `config/app.php`. Bila server ini pernah menjalankan `php artisan config:cache` atau `php artisan optimize`, cache lama masih menyebut kelas itu dan SETIAP perintah artisan, termasuk `pos:preflight`, gagal dengan "Class ... not found". Menghapus berkas cache itu aman (Laravel membuatnya lagi bila diminta).
+   Alasannya: rilis penghapusan tenancy (T1) mengeluarkan `App\Providers\TenancyServiceProvider` dari `config/app.php`. Bila server ini pernah menjalankan `php artisan config:cache` atau `php artisan optimize`, cache lama masih menyebut kelas itu, dan perintah artisan gagal dengan `Class "App\Providers\TenancyServiceProvider" not found`. `composer install` yang berjalan normal (dengan script-nya) sudah menghapus `config.php`, `services.php`, dan `packages.php` sendiri lewat script `post-autoload-dump` Laravel; tetapi ia tidak menghapus cache rute dan event, dan tidak membantu bila `vendor` diunggah tanpa menjalankan composer atau composer dijalankan dengan `--no-scripts`. Perintah `rm -f` di atas aman diulang dan tidak merugikan (Laravel membuat cache itu lagi bila diminta). Langkah 11 (`optimize:clear`) tetap dijalankan.
 
 ## Langkah 3: GERBANG (wajib lulus)
 
