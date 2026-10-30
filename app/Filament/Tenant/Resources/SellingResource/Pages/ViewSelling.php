@@ -116,6 +116,17 @@ class ViewSelling extends ViewRecord
                     'onclick' => 'window.handlePrintReceipt && window.handlePrintReceipt()',
                 ])
                 ->visible(fn (): bool => ! $this->record->trashed() && can('can print selling')),
+            // A restaurant only: the kitchen ticket of the whole sale, marked as a copy, as often as needed.
+            Action::make('printKitchen')
+                ->label(__('Print kitchen ticket'))
+                ->icon('heroicon-s-printer')
+                ->color('gray')
+                ->extraAttributes([
+                    'id' => 'printKitchenButton',
+                    'type' => 'button',
+                    'onclick' => 'window.handlePrintKitchen && window.handlePrintKitchen()',
+                ])
+                ->visible(fn (): bool => ! $this->record->trashed() && can('can print selling') && $this->about?->business_type === 'fnb'),
         ];
     }
 

@@ -70,7 +70,7 @@
         <x-filament::button color="gray" type="button" size="lg" data-testid="success-kitchen-print"
           x-show="canPrintKitchen" x-cloak
           x-on:click.prevent.stop="printKitchen()">
-          {{ __('Print kitchen ticket') }}
+          <span x-text="kitchenPrinted ? @js(__('Print kitchen ticket again')) : @js(__('Print kitchen ticket'))">{{ __('Print kitchen ticket') }}</span>
         </x-filament::button>
       @endif
       <x-filament::button color="gray" type="button" size="lg" data-testid="success-close"

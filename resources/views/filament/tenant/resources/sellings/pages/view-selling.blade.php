@@ -149,11 +149,26 @@
     ? window.LakasirReceipt.print(window._lakasirViewSelling, { buttonId: 'printButton', reprint: true })
     : Promise.resolve(false);
 
+  // The kitchen ticket of this sale again: all its items, marked COPY. The page toasts a failed print (toast: true).
+  window.handlePrintKitchen = () => window.LakasirReceipt
+    ? window.LakasirReceipt.print(window._lakasirViewSelling, {
+      mode: 'kitchen',
+      reprint: true,
+      toast: true,
+      buttonId: 'printKitchenButton',
+      jobKey: 'kitchen-view-' + window._lakasirViewSelling.id,
+    })
+    : Promise.resolve(false);
+
   // Ensure button binding is immediate
   const attachPrintBtn = () => {
     const btn = document.getElementById('printButton');
     if (btn) {
       btn.onclick = window.handlePrintReceipt;
+    }
+    const kitchenBtn = document.getElementById('printKitchenButton');
+    if (kitchenBtn) {
+      kitchenBtn.onclick = window.handlePrintKitchen;
     }
     const invBtn = document.getElementById('printInvoice');
     if (invBtn) {
