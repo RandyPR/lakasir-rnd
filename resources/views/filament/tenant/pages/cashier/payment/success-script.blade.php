@@ -70,8 +70,9 @@
       },
 
       // A direct sale of a restaurant gets its kitchen ticket with one tap (a bill's ticket goes with the bill).
+      // The button stays after the ticket printed, so it can be printed again (paper jam, kitchen lost it).
       get canPrintKitchen() {
-        return Boolean(this.selling) && !this.fromBill && !this.kitchenPrinted;
+        return Boolean(this.selling) && !this.fromBill;
       },
 
       onSubmitted: function (event) {
@@ -107,8 +108,10 @@
           return;
         }
 
+        // The second and later prints say COPY, so the kitchen does not cook the order twice.
         var ok = await window.LakasirReceipt.print(this.selling, {
           mode: 'kitchen',
+          reprint: this.kitchenPrinted,
           jobKey: 'kitchen-sale-' + (this.selling.id || ''),
         });
         if (ok) {

@@ -680,11 +680,14 @@
       printer.size(0, 0).style('normal').align('left');
     }
 
-    function tallLines(printer, ctx, prefix, name, note) {
+    // The items are printed twice as wide AND twice as high: twice as high alone (size(0, 1)) makes narrow letters that
+    // look squeezed. A 2x wide character takes two columns, so the lines wrap at half the columns, like bigLine().
+    function bigItemLines(printer, ctx, prefix, name, note) {
       var width = ctx.width;
+      var limit = Math.max(4, Math.floor(width / 2));
 
-      printer.size(0, 1).style('bold');
-      wrapText(prefix + name, width, spaces(prefix.length)).forEach(function (line) {
+      printer.size(1, 1).style('bold');
+      wrapText(prefix + name, limit, spaces(prefix.length)).forEach(function (line) {
         printer.text(unglue(line));
       });
       printer.size(0, 0);
@@ -803,7 +806,7 @@
           if (Math.abs(totalQty - qty) > 0.0005) {
             name += ' ' + glue(label('totalN', { n: qtyText(totalQty) }));
           }
-          tallLines(printer, ctx, qtyText(qty) + ' x ', name, toPrintable(detail.note));
+          bigItemLines(printer, ctx, qtyText(qty) + ' x ', name, toPrintable(detail.note));
 
           if (showPrices) {
             var figures = lineFigures({ qty: totalQty > 0 ? totalQty : 1, price: detail.price });
@@ -822,7 +825,7 @@
         cancelled.forEach(function (entry) {
           var name = toPrintable(entry && entry.name)
             || '#' + (entry && entry.product_id !== undefined && entry.product_id !== null ? entry.product_id : '');
-          tallLines(printer, ctx, qtyText(Number(entry && entry.qty) || 0) + ' x ', name, toPrintable(entry && entry.note));
+          bigItemLines(printer, ctx, qtyText(Number(entry && entry.qty) || 0) + ' x ', name, toPrintable(entry && entry.note));
         });
       }
 
@@ -1128,7 +1131,8 @@
 
         var printerData = readPrinter();
         // Kitchen failures are shown by the page (permanent toast with retry); the others are toasted here.
-        var toast = job.mode !== 'kitchen';
+        // A page without that (the sale view) asks for the toast with opts.toast.
+        var toast = job.mode !== 'kitchen' || Boolean(job.opts.toast);
 
         if (!printerData) {
           if (toast) {
@@ -1174,7 +1178,7 @@
       } catch (error) {
         console.error('Print error:', error);
         var message = label('failed') + ': ' + ((error && error.message) || error);
-        var show = job.mode !== 'kitchen';
+        var show = job.mode !== 'kitchen' || Boolean(job.opts.toast);
         if (show) {
           notify(message, 'danger', false);
         }
@@ -1186,7 +1190,7 @@
     var queueTail = Promise.resolve();
     var recentJobs = {};
 
-    // print(payload, opts?: {buttonId, reprint, mode: 'receipt'|'bill'|'kitchen', showPrices, jobKey, ack}): Promise<boolean>
+    // print(payload, opts?: {buttonId, reprint, mode: 'receipt'|'bill'|'kitchen', showPrices, jobKey, ack, toast}): Promise<boolean>
     // Jobs run one after another. The same jobKey (default mode:id) returns the same Promise while the job is
     // queued or running and for dedupeMs after it printed; a failed job can be retried at once.
     function print(payload, opts) {

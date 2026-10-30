@@ -203,6 +203,9 @@ for (const paper of [58, 80]) {
     check(`${name} ${paper}mm ends with normal size, style and left alignment`, commands.endsWith(END),
       JSON.stringify(commands.slice(-24)));
     check(`${name} ${paper}mm cuts only where the queue cuts`, !has(commands, '\x1d\x56'));
+    // Twice as high alone (GS ! 0x01) prints narrow letters that look squeezed; big text is twice as wide as well.
+    check(`${name} ${paper}mm never prints text twice as high but not twice as wide`,
+      !has(commands, '\x1d\x21\x01'), JSON.stringify(commands));
 
     // preview() is build() on a TextPrinter.
     const textPrinter = new R.TextPrinter({ paperWidth: paper });
@@ -274,9 +277,17 @@ function title(text) {
 
   check('kitchen new: title', title(text) === `${L.kitchen} - ${L.newOrder}`, title(text));
   check('kitchen new: the table in big letters', has(text, L.tableWord.replace(':number', '5')));
-  check('kitchen new: qty x name and the note', /^2 x Nasi Goreng Spesial$/m.test(text) && has(text, '  > pedas'), text);
+  // The items are twice as wide, so they wrap at 16 columns on 58 mm paper.
+  check('kitchen new: qty x name and the note',
+    /^2 x Nasi Goreng$/m.test(text) && /^ {4}Spesial$/m.test(text) && has(text, '  > pedas'), text);
+  check('kitchen new: the items are printed twice as wide and twice as high, the note at normal size',
+    has(commandsOf(P.kitchenNew, 'kitchen', 58), '\x1d\x21\x11\x1b\x45\x01' + '2 x Nasi Goreng\n')
+    && has(commandsOf(P.kitchenNew, 'kitchen', 58), '\x1d\x21\x00' + '  > pedas\n'));
   check('kitchen new: no prices by default', !has(text, '25.000') && !has(text, '50.000'), text);
   check('kitchen new: shipment number at the end', has(text, L.shipmentN.replace(':n', '1')));
+
+  const wide = previewOf(P.kitchenNew, 'kitchen', 80);
+  check('kitchen new 80mm: the name fits on one line at 24 columns', /^2 x Nasi Goreng Spesial$/m.test(wide), wide);
 
   const priced = previewOf(P.kitchenNew, 'kitchen', 58, { showPrices: true });
   check('kitchen new: prices when the setting asks for them', /^ {2}2 x 25\.000 +50\.000$/m.test(priced), priced);
@@ -324,7 +335,7 @@ function title(text) {
   check('kitchen void: title', title(text) === `${L.kitchen} - ${L.voided}`, title(text));
   check('kitchen void: the reason', has(flat(text), `${L.voidReason}: Pelanggan pergi`), text);
   check('kitchen void: what the kitchen already made is cancelled', has(text, `${L.cancelled}:`)
-    && /^3 x Nasi Goreng Spesial$/m.test(text), text);
+    && has(flat(text), '3 x Nasi Goreng Spesial'), text);
 }
 
 {
@@ -443,6 +454,19 @@ async function queueChecks() {
   failNext = true;
   ok = await R.print(P.receipt, { mode: 'receipt', jobKey: 'receipt-3' });
   check('queue: a receipt failure is notified here', ok === false && notifications.length === before + 1, notifications);
+
+  // The sale page has no cashier toast for a kitchen failure: it asks for one with toast: true.
+  const beforeToast = notifications.length;
+  failNext = true;
+  ok = await R.print(P.kitchenNew, { mode: 'kitchen', jobKey: 'kitchen-view-1', reprint: true, toast: true });
+  check('queue: a kitchen failure is notified here when the page asks for it',
+    ok === false && notifications.length === beforeToast + 1, notifications);
+
+  // The kitchen ticket of a sale printed again says COPY.
+  const printed = prints.length;
+  ok = await R.print(P.kitchenNew, { mode: 'kitchen', jobKey: 'kitchen-view-2', reprint: true, toast: true });
+  check('queue: a reprinted kitchen ticket is marked as a copy',
+    ok === true && prints.length === printed + 1 && countOf(prints[printed].commands, L.copy) === 2, prints[printed]);
 
   // A job that never reaches the printer (Printer.print() returned without raising the flag) is not a success.
   context.Printer = class extends FakePrinter {
