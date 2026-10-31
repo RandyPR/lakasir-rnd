@@ -450,7 +450,8 @@ test('reprinting the last ticket changes nothing on the bill', function () {
         ->and($payload['kitchen']['reprint'])->toBeTrue()->and($payload['kitchen']['batch_no'])->toBe(1)
         ->and($payload['kitchen']['table_label'])->toBe('12')
         ->and($payload['selling_details'])->toHaveCount(2)
-        ->and($payload['printed_at_label'])->toBe('12:00');                 // the original time, not 7 minutes later
+        ->and($payload['printed_at_label'])->toBe('12:00')                  // the original time, not 7 minutes later
+        ->and($payload['printed_on_label'])->toBe('15/10/2026');            // and the date, for a ticket that lies around
 
     $after = OpenBill::find($bill->id);
     expect($after->version)->toBe($before->version)->and($after->kitchen_batch_count)->toBe(1)

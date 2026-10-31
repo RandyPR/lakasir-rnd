@@ -752,7 +752,8 @@
       var orderLabel = orderNumberText(selling, 'billNo');
       var dateLabel = toPrintable(selling.business_date_label);
       var head = (orderLabel + (dateLabel ? ' ' + dateLabel : '')).trim();
-      var stamp = toPrintable(selling.printed_at_label);
+      // Date and time: a ticket of yesterday that is still lying around must not pass for today's.
+      var stamp = [toPrintable(selling.printed_on_label), toPrintable(selling.printed_at_label)].filter(Boolean).join(' ');
       printer.style('bold');
       if (head && stamp) {
         twoColumns(printer, head, stamp, width);
