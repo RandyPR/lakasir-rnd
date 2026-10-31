@@ -142,3 +142,14 @@ test('the success dialog keeps the kitchen button after the ticket printed and m
         ->and($modal)->toContain('x-show="canPrintKitchen"')
         ->toContain('Print kitchen ticket again');
 });
+
+test('a kitchen ticket made from a finished sale carries the date and time of the sale in the business timezone', function () {
+    // 20:30 UTC on the 15th is 03:30 on the 16th in Jakarta: the date must follow the business timezone.
+    $sale = kitchenReprintSale();
+    $sale->forceFill(['date' => '2026-10-15 20:30:00'])->save();
+
+    $payload = json_decode(json_encode($sale->fresh()->loadForReceipt()), true);
+
+    expect($payload['printed_on_label'])->toBe('16/10/2026')
+        ->and($payload['printed_at_label'])->toBe('03:30');
+});

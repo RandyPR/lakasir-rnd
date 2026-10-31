@@ -185,6 +185,8 @@ const documents = [
   ['kitchen reprint', P.kitchenReprint, 'kitchen'],
   ['kitchen void', P.kitchenVoid, 'kitchen'],
   ['kitchen takeaway', P.kitchenTakeaway, 'kitchen'],
+  ['kitchen sale', P.receipt, 'kitchen'],
+  ['kitchen yesterday', Object.assign({}, P.kitchenNew, { business_date_label: 'KEMARIN' }), 'kitchen'],
 ];
 
 for (const paper of [58, 80]) {
@@ -285,6 +287,19 @@ function title(text) {
     && has(commandsOf(P.kitchenNew, 'kitchen', 58), '\x1d\x21\x00' + '  > pedas\n'));
   check('kitchen new: no prices by default', !has(text, '25.000') && !has(text, '50.000'), text);
   check('kitchen new: shipment number at the end', has(text, L.shipmentN.replace(':n', '1')));
+
+  // The date and the time, so a ticket of yesterday cannot pass for today's.
+  const stamp = `${P.kitchenNew.printed_on_label} ${P.kitchenNew.printed_at_label}`;
+  check('kitchen new: the date and the time are printed', /^\d{2}\/\d{2}\/\d{4}$/.test(P.kitchenNew.printed_on_label)
+    && linesOf(text).some((l) => l.endsWith(stamp)), text);
+
+  const sale = previewOf(P.receipt, 'kitchen', 58);
+  const saleStamp = `${P.receipt.printed_on_label} ${P.receipt.printed_at_label}`;
+  check('kitchen of a finished sale: the date and the time of the sale are printed',
+    /^\d{2}\/\d{2}\/\d{4}$/.test(P.receipt.printed_on_label) && has(sale, saleStamp), sale);
+
+  const yesterday = previewOf(documents[documents.length - 1][1], 'kitchen', 58);
+  check('kitchen of yesterday: the KEMARIN marker and the date', has(yesterday, 'KEMARIN') && has(yesterday, stamp), yesterday);
 
   const wide = previewOf(P.kitchenNew, 'kitchen', 80);
   check('kitchen new 80mm: the name fits on one line at 24 columns', /^2 x Nasi Goreng Spesial$/m.test(wide), wide);

@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -115,7 +116,7 @@ class Selling extends Model
         ]);
 
         $this->setRelation('sellingDetails', OrderLineSorter::sort($this->sellingDetails));
-        $this->append('note_plain');
+        $this->append(['note_plain', 'printed_on_label', 'printed_at_label']);
         $this->receiptLoaded = true;
 
         return $this;
@@ -127,6 +128,26 @@ class Selling extends Model
     public function notePlain(): Attribute
     {
         return Attribute::make(get: fn () => PlainText::fromHtml($this->note));
+    }
+
+    /**
+     * The date and time a kitchen ticket made from this finished sale shows (the keys of an open bill's ticket):
+     * when the sale was made, in the business timezone, so a ticket of yesterday can be told from today's.
+     */
+    public function printedOnLabel(): Attribute
+    {
+        return Attribute::make(get: fn () => $this->saleMoment()->format('d/m/Y'));
+    }
+
+    public function printedAtLabel(): Attribute
+    {
+        return Attribute::make(get: fn () => $this->saleMoment()->format('H:i'));
+    }
+
+    private function saleMoment(): Carbon
+    {
+        return Carbon::parse(BusinessDay::normalize($this->date ?: $this->created_at), 'UTC')
+            ->setTimezone(BusinessDay::timezone());
     }
 
     public function paymentMethod()

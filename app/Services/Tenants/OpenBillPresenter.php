@@ -56,6 +56,7 @@ final class OpenBillPresenter
             'note_plain' => PlainText::fromHtml($bill->note),
             'user' => ['name' => $userName ?? ''],
             'created_at_label' => $createdAt->format($dateLabel === null ? 'H:i' : 'd/m H:i'),
+            'printed_on_label' => $printedAt->format('d/m/Y'),
             'printed_at_label' => $printedAt->format('H:i'),
             'subtotal' => $totals['subtotal'],
             'tax' => (float) $bill->tax_percent,
