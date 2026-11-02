@@ -599,5 +599,13 @@
     ":count sales restored": ":count sales restored",
     ":code was not restored": ":code was not restored",
     "In the trash since :date by :user": "In the trash since :date by :user",
-    "Order #": "Order #"
+    "Order #": "Order #",
+    "Session ended": "Session ended",
+    "You were signed out because the screen was not used for a long time. Taking you to the login page.": "You were signed out because the screen was not used for a long time. Taking you to the login page.",
+    "Connection problem": "Connection problem",
+    "The server could not be reached. Check the connection and try again.": "The server could not be reached. Check the connection and try again.",
+    "Not allowed": "Not allowed",
+    "You are not allowed to do this.": "You are not allowed to do this.",
+    "Something went wrong": "Something went wrong",
+    "The server could not finish this. Try again.": "The server could not finish this. Try again."
 }
