@@ -158,6 +158,15 @@
     </div>
   </x-filament::modal>
 
+  {{--
+    Static parts: nothing in the next three blocks (QR scanner, the success dialog, the print preview) depends on
+    the state of this component, and together with the dialogs below they are about a quarter of the HTML of every
+    response. They are rendered by the page load only ($renderStaticParts, see getViewData()). On a Livewire update
+    the wrapper arrives empty and wire:ignore keeps what the page load put there, so a tap on "add" no longer sends
+    them again and the browser no longer compares them.
+  --}}
+  <div wire:ignore data-static-part="qr-scanner">
+  @if ($renderStaticParts)
   <x-filament::modal id="qr-scanner-modal" width="lg" :close-by-clicking-away="false"
     x-on:close-modal.window="if ($event.detail.id === 'qr-scanner-modal') { window.stopScanner(); }">
     <x-slot name="heading">
@@ -323,9 +332,19 @@
       display: block !important;
     }
   </style>
+  @endif
+  </div>
 
   @include('filament.tenant.pages.cashier.payment.modal')
-  @include('filament.tenant.pages.cashier.payment.success-modal')
-  @include('filament.tenant.pages.cashier.bills.preview-modal')
+  <div wire:ignore data-static-part="success">
+    @if ($renderStaticParts)
+      @include('filament.tenant.pages.cashier.payment.success-modal')
+    @endif
+  </div>
+  <div wire:ignore data-static-part="receipt-preview">
+    @if ($renderStaticParts)
+      @include('filament.tenant.pages.cashier.bills.preview-modal')
+    @endif
+  </div>
 
 </div>

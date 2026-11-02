@@ -60,7 +60,7 @@
       aria-label="{{ $out ? __('Out of stock') : __('Add :name', ['name' => $name]) }}"
       @disabled($out)
       x-show="n <= 0"
-      x-on:click="LakasirPV.add($wire, id)"
+      x-on:click="LakasirPV.add($wire, id, unl ? null : stock)"
     >
       <svg class="pv-i" aria-hidden="true" focusable="false"><use href="#pv-i-plus" /></svg>
       <span class="pv-lbl">{{ $out ? __('Out of stock') : __('Add') }}</span>
@@ -100,7 +100,7 @@
         data-testid="product-inc-{{ $id }}"
         aria-label="{{ __('Add :name', ['name' => $name]) }}"
         x-bind:disabled="! unl && n >= stock"
-        x-on:click="LakasirPV.add($wire, id)"
+        x-on:click="LakasirPV.add($wire, id, unl ? null : stock)"
       >
         <svg class="pv-i" aria-hidden="true" focusable="false"><use href="#pv-i-plus" /></svg>
       </button>
