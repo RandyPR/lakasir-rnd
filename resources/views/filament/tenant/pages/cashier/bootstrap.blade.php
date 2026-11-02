@@ -364,10 +364,38 @@
       else document.addEventListener('alpine:init', fn, { once: true });
     };
 
+    // qty: what the server last said (event cart-qty-updated). hold: product_id => {value, n} for a product whose add or
+    // reduce call is still running: the card shows `value` right away (the tap feels instant) and falls back to qty
+    // when the last call of that product is done, whatever the server decided (refused, dialog, error).
+    // A failed request never settles the promise of the call (Livewire only tells the commit hooks), so releaseAll()
+    // is also called from the hook below; gen keeps the late end() of a released call from touching a newer hold.
     const cartStore = (seed) => ({
       qty: Array.isArray(seed) ? {} : (seed || {}),
-      of(id) { return Number(this.qty[id] || 0); },
+      hold: {},
+      gen: 0,
+      of(id) {
+        const h = this.hold[id];
+        return Number(h ? h.value : (this.qty[id] || 0));
+      },
       set(map) { this.qty = Array.isArray(map) ? {} : (map || {}); },
+      begin(id, value) {
+        const h = this.hold[id] || { value: 0, n: 0 };
+        h.n += 1;
+        h.value = Number(value) || 0;
+        this.hold[id] = h;
+        return this.gen;
+      },
+      end(id, gen) {
+        if (gen !== undefined && gen !== this.gen) return;
+        const h = this.hold[id];
+        if (!h) return;
+        h.n -= 1;
+        if (h.n <= 0) delete this.hold[id];
+      },
+      releaseAll() {
+        this.gen += 1;
+        this.hold = {};
+      },
     });
 
     // The seed changes on every full page load, so the store is rebuilt each time this script runs.
@@ -643,6 +671,30 @@
       };
       if (w.Livewire && typeof w.Livewire.hook === 'function') keepFocusedInputs();
       else document.addEventListener('livewire:init', keepFocusedInputs, { once: true });
+
+      // This page holds the static parts (QR scanner, success dialog, ...) in wire:ignore shells, so the server may leave
+      // them out of the answers (Cashier::STATIC_PARTS_HEADER). A tab loaded before this release does not send it.
+      const announceStaticParts = () => {
+        w.Livewire.hook('request', ({ options }) => {
+          options.headers = options.headers || {};
+          options.headers['X-Lakasir-Static-Parts'] = 'loaded';
+        });
+      };
+      if (w.Livewire && typeof w.Livewire.hook === 'function') announceStaticParts();
+      else document.addEventListener('livewire:init', announceStaticParts, { once: true });
+
+      // A request that failed (offline, 500, session expired) leaves the cart as the server last said: the cards stop
+      // showing the quantity they were showing ahead of the answer.
+      const dropHoldsOnFailure = () => {
+        w.Livewire.hook('commit', ({ fail }) => {
+          fail(() => {
+            const store = w.Alpine && w.Alpine.store('cart');
+            if (store && typeof store.releaseAll === 'function') store.releaseAll();
+          });
+        });
+      };
+      if (w.Livewire && typeof w.Livewire.hook === 'function') dropHoldsOnFailure();
+      else document.addEventListener('livewire:init', dropHoldsOnFailure, { once: true });
 
       // -------------------------------------------------------------------------------------------------------
       // events from the server

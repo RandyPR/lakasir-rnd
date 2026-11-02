@@ -18,6 +18,8 @@ async function launch(opts = {}) {
     deviceScaleFactor: 1,
     hasTouch: !!opts.touch,
     isMobile: !!opts.mobile,
+    // 'block' when the script holds back or fails requests with page.route(): the app's PWA service worker hides them.
+    serviceWorkers: opts.serviceWorkers || 'allow',
     // Reusing a signed-in session avoids the login rate limit (5 a minute) when a script opens many browsers.
     storageState: opts.storageState && fs.existsSync(opts.storageState) ? opts.storageState : undefined,
   });

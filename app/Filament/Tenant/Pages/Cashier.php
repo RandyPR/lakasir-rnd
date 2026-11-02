@@ -64,11 +64,15 @@ use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
+use Livewire\Livewire;
 use Throwable;
 
 class Cashier extends Page implements HasForms
 {
     use CartInteraction, HasTranslatableResource, RefreshThePage;
+
+    /** Sent by the cashier page with every Livewire call once it holds the static parts (see getViewData()). */
+    public const STATIC_PARTS_HEADER = 'X-Lakasir-Static-Parts';
 
     public static ?string $label = 'POS';
 
@@ -2343,6 +2347,12 @@ class Cashier extends Page implements HasForms
         $user = Filament::auth()->user();
 
         return [
+            // The page load renders the pieces that never change (QR scanner, success dialog, print preview, the
+            // sent-item / conflict / takeaway dialogs). A Livewire update leaves them out (the view keeps their
+            // wire:ignore shells), which is about a quarter of the HTML of a cart tap, but ONLY when the page says it
+            // has them: a tab that was loaded before this release has no shells, and an answer without the pieces
+            // would delete them from it. The page sends the header from the bootstrap script (Livewire 'request' hook).
+            'renderStaticParts' => ! (Livewire::isLivewireRequest() && request()->hasHeader(self::STATIC_PARTS_HEADER)),
             'cartGroups' => OrderLineSorter::group($this->cartItems),
             'cartCount' => $this->cartItems->count(),
             'cartQtyTotal' => (float) $this->cartItems->sum('qty'),

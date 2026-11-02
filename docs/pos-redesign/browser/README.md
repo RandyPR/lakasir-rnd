@@ -32,6 +32,7 @@ antar-skrip karena Filament membatasi 5 login per menit.
 | `flowD.cjs` | retail di HP 375: Simpan bill, toast tanpa kata dapur, Bayar bill, uang pas |
 | `flowE.cjs` | ubin Catatan pesanan, diskon baris lewat "lainnya" (fitur Discount harus aktif untuk diskon) |
 | `flowF.cjs` | HP 360: toast "Item dihapus / Urungkan" ada di bawah, di atas dock (tidak menutupi kotak cari dan chip kategori); tetap di atas saat sheet pesanan terbuka |
+| `flowG.cjs` | HP 360, kecepatan kasir: jawaban Livewire tidak lagi memuat pemindai QR, dialog sukses, pratinjau cetak, dan tiga dialog tindakan (tetap berfungsi setelah banyak sentuhan, termasuk bayar tunai; tab dari sebelum rilis, yang tidak mengirim header `X-Lakasir-Static-Parts`, masih mendapat semuanya); dengan server diperlambat 1,5 detik angka di kartu berubah sebelum jawaban datang (tambah, +, hapus), kartu kembali benar bila permintaan gagal, dan aturan helper (batas stok, bill yang sudah dikirim ke dapur tidak didahulukan). Memakai `serviceWorkers: 'block'` (service worker PWA menyembunyikan permintaan dari `page.route`) |
 | `widths.cjs` | 320/375/414/768/1024/1280, terang dan gelap: halaman, keranjang, dialog bayar, daftar bill tanpa overflow horizontal dan tanpa error konsol |
 
 `printer-stub.js` dipasang sebelum skrip halaman: printer palsu yang hanya mencatat perintah (`window.__prints`),

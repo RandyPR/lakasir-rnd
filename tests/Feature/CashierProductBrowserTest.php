@@ -306,6 +306,59 @@ test('a cart action sends neither the product list nor the dialog scripts; the p
         ->not->toContain('data-pv-card');
 });
 
+test('the page load brings the static parts; an update from such a page leaves them out, one from an older page does not', function () {
+    pbProduct('Bakso', $this->food);
+    $this->withoutVite();
+
+    // Pieces that never depend on the component state: QR scanner, success dialog, print preview, three action dialogs.
+    $contents = ['id="qr-reader"', 'data-testid="success-sheet"', 'data-testid="receipt-preview-dialog"',
+        'data-testid="takeaway-prompt"', 'data-testid="cancel-sent-dialog"', 'data-testid="bill-conflict"'];
+    $shells = ['qr-scanner', 'success', 'receipt-preview', 'dialogs'];
+
+    $page = $this->get(Cashier::getUrl())->assertOk()->getContent();
+    foreach ($contents as $content) {
+        expect($page)->toContain($content);
+    }
+    foreach ($shells as $shell) {
+        expect($page)->toContain('<div wire:ignore data-static-part="'.$shell.'">');
+    }
+
+    // A real Livewire update (POST to the update route with the snapshot of the mounted page). The bootstrap script of
+    // the page adds the header; Livewire::test() cannot send one on its calls, so the HTTP route is used.
+    $snapshot = json_encode(Livewire::test(Cashier::class)->snapshot);
+    $call = fn (array $headers): string => (string) data_get($this
+        ->withHeaders(array_merge(['X-Livewire' => 'true'], $headers))
+        ->postJson(app('livewire')->getUpdateUri(), ['components' => [[
+            'snapshot' => $snapshot,
+            'updates' => [],
+            'calls' => [['path' => '', 'method' => 'addCart', 'params' => [Product::query()->value('id')]]],
+        ]]])
+        ->assertOk()
+        ->json(), 'components.0.effects.html');
+
+    // A tab loaded before this release has no shells and sends no header: it still gets the pieces, otherwise the
+    // update would delete them from it (no QR scanner, no success dialog after a payment). (This call comes first:
+    // withHeaders() keeps the headers for the next calls of the test.)
+    $stale = $call([]);
+
+    foreach ($contents as $content) {
+        expect($stale)->toContain($content);
+    }
+
+    // A page that says it holds the shells gets answers without them, and the shells themselves stay.
+    $update = $call([Cashier::STATIC_PARTS_HEADER => 'loaded']);
+
+    foreach ($contents as $content) {
+        expect($update)->not->toContain($content);
+    }
+    foreach ($shells as $shell) {
+        expect($update)->toContain('<div wire:ignore data-static-part="'.$shell.'">');
+    }
+
+    // What changes with the cart is still sent.
+    expect($update)->toContain('data-testid="cart-pay"');
+});
+
 test('the page scripts reach the cashier component: its wire:id is on the wrapper around cashier-root', function () {
     $this->withoutVite();
     $html = $this->get(Cashier::getUrl())->assertOk()->getContent();

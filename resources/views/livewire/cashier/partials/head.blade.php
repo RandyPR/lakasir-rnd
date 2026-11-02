@@ -22,7 +22,7 @@
     }
     root.setAttribute('data-product-view', mode);
 
-    if (window.LakasirPV && window.LakasirPV.version >= 1) {
+    if (window.LakasirPV && window.LakasirPV.version >= 2) {
       return;
     }
 
@@ -126,20 +126,76 @@
       return promise;
     }
 
-    function call(wire, method, id, extra) {
+    function cartStore() {
+      try {
+        var store = window.Alpine && typeof window.Alpine.store === 'function' ? window.Alpine.store('cart') : null;
+        return store && typeof store.begin === 'function' && typeof store.end === 'function' ? store : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // `expect` (optional): the quantity the card shows while the call runs. The server has the last word: when the call
+    // is done the card shows whatever the cart really holds (a refused add, the cancel dialog and an error all snap back).
+    function call(wire, method, id, extra, expect) {
       var parent = wire && wire.$parent;
       if (!parent || typeof parent[method] !== 'function') {
         return null;
       }
-      return track(extra === undefined ? parent[method](id) : parent[method](id, extra));
+
+      var store = expect === undefined ? null : cartStore();
+      var release = function () {};
+      if (store) {
+        var gen = store.begin(id, expect);
+        var done = false;
+        var timer = null;
+        release = function () {
+          if (done) {
+            return;
+          }
+          done = true;
+          window.clearTimeout(timer);
+          store.end(id, gen);
+        };
+        // A call that never answers (the connection hangs) must not keep a quantity on the card that is not in the cart.
+        timer = window.setTimeout(release, 20000);
+      }
+
+      var promise;
+      try {
+        promise = extra === undefined ? parent[method](id) : parent[method](id, extra);
+      } catch (e) {
+        release();
+        throw e;
+      }
+
+      if (store) {
+        if (promise && typeof promise.then === 'function') {
+          promise.then(release, release);
+        } else {
+          release();
+        }
+      }
+
+      return track(promise);
     }
 
-    function add(wire, id) {
-      return call(wire, 'addCart', id);
+    // `limit`: the stock of the card (null = unlimited). Over the stock the server answers "Stock is out", so the card
+    // is not changed ahead of it.
+    function add(wire, id, limit) {
+      var n = qty(id);
+      var ahead = limit === null || limit === undefined || n + 1 <= Number(limit) ? n + 1 : undefined;
+      return call(wire, 'addCart', id, undefined, ahead);
     }
 
+    // Reducing a bill that the kitchen already received can open the cancel dialog instead of changing the line, so
+    // the card only moves ahead of the server in the private cart and in a bill that was not sent.
     function reduce(wire, id) {
-      return call(wire, 'reduceCart', id);
+      var parent = wire && wire.$parent;
+      var bill = parent ? parent.openBill : null;
+      var inBill = Boolean(parent && parent.openBillId !== null && parent.openBillId !== undefined);
+      var plain = !inBill || Boolean(bill && typeof bill === 'object' && bill.sent === false);
+      return call(wire, 'reduceCart', id, undefined, plain ? Math.max(0, qty(id) - 1) : undefined);
     }
 
     // The number typed in a card: the quantity becomes exactly that (0 or empty removes the line).
@@ -184,7 +240,7 @@
     }
 
     window.LakasirPV = {
-      version: 1,
+      version: 2,
       view: getView,
       qty: qty,
       fmt: fmt,

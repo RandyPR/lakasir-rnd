@@ -115,6 +115,8 @@
     $dialogPanel = 'relative max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-4 shadow-2xl sm:rounded-2xl dark:bg-gray-900';
   @endphp
 
+  <div wire:ignore data-static-part="dialogs">
+  @if ($renderStaticParts)
   {{-- Reduce or remove a line the kitchen already received: reason required, right checked again by the server --}}
   <div x-data="lkDialog('cancel-sent')" x-cloak x-show="open" x-on:keydown="onKey($event)"
     :data-lk-dialog-open="open ? '1' : '0'" class="{{ $dialogShell }}">
@@ -195,5 +197,7 @@
           class="{{ $btnPrimary }}">{{ __('Send as takeaway') }}</button>
       </div>
     </div>
+  </div>
+  @endif
   </div>
 @endif
