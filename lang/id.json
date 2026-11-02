@@ -614,5 +614,13 @@
     ":count sales restored": ":count penjualan dipulihkan",
     ":code was not restored": ":code tidak dipulihkan",
     "In the trash since :date by :user": "Di sampah sejak :date oleh :user",
-    "Order #": "Order #"
+    "Order #": "Order #",
+    "Session ended": "Sesi berakhir",
+    "You were signed out because the screen was not used for a long time. Taking you to the login page.": "Anda keluar karena layar lama tidak dipakai. Mengarahkan ke halaman masuk.",
+    "Connection problem": "Koneksi bermasalah",
+    "The server could not be reached. Check the connection and try again.": "Server tidak dapat dihubungi. Periksa koneksi lalu coba lagi.",
+    "Not allowed": "Tidak diizinkan",
+    "You are not allowed to do this.": "Anda tidak diizinkan melakukan ini.",
+    "Something went wrong": "Terjadi kesalahan",
+    "The server could not finish this. Try again.": "Server tidak dapat menyelesaikan ini. Coba lagi."
 }

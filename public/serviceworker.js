@@ -88,6 +88,12 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Only GET requests are answered from here. A POST (Livewire's /livewire/update, every click on the cashier) goes
+  // straight to the network, so a dropped connection is reported by the browser as the network error it is.
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .catch(() => {
@@ -98,13 +104,12 @@ self.addEventListener('fetch', (event) => {
             }
 
             if (event.request.mode === 'navigate') {
-              return caches.match('/offline');
+              return caches.match('/offline').then((offline) => offline || Response.error());
             }
 
-            return new Response('', {
-              status: 408,
-              statusText: 'Request timed out.'
-            });
+            // Not an invented answer: this used to be an empty "request timed out" page, which Livewire showed as a
+            // blank error overlay whenever the phone woke up before its connection did.
+            return Response.error();
           });
       })
   );

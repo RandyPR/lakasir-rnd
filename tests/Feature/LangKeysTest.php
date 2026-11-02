@@ -19,6 +19,7 @@ if (! function_exists('langKeysSources')) {
             'resources/views/filament/tenant/partials/receipt-print.blade.php',
             'resources/views/filament/tenant/resources/sellings/pages/view-selling.blade.php',
             'resources/views/livewire/price-setting.blade.php',
+            'resources/views/livewire-resilience.blade.php',
             'app/Filament/Tenant/Pages/Cashier.php',
             'app/Filament/Tenant/Pages/Printer.php',
             'app/Filament/Tenant/Pages/Traits/CartInteraction.php',

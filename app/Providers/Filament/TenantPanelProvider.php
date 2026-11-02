@@ -97,6 +97,12 @@ class TenantPanelProvider extends PanelProvider
             fn () => view('version-indicator')
         );
 
+        // A Livewire request that fails (session ended, connection dropped) gets a toast, not a blank overlay.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::SCRIPTS_AFTER,
+            fn () => view('livewire-resilience')
+        );
+
         if (app()->environment('demo')) {
             FilamentView::registerRenderHook(
                 PanelsRenderHook::BODY_START,

@@ -17,6 +17,12 @@ Route::get('/serviceworker.js', function () {
 Route::get('/', function () {
     return redirect()->to('/member');
 });
+
+// Asked by the panel's page script (resources/views/livewire-resilience.blade.php): 204 while the session lives, 401
+// when it is gone. A request that reaches it also renews the session, so a screen that stays open does not time out.
+Route::get('/session-ping', fn () => response()->noContent()->withHeaders(['Cache-Control' => 'no-store, private']))
+    ->middleware('auth')
+    ->name('session.ping');
 // Reports and printing sit next to the Filament panel but outside it, so they check the same permissions the panel
 // pages check in canAccess().
 Route::middleware('auth')->group(function () {
