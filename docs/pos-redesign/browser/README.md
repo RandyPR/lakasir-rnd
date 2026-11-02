@@ -31,6 +31,7 @@ antar-skrip karena Filament membatasi 5 login per menit.
 | `flowC.cjs` | ketik jumlah 12,5 di stepper, Urungkan setelah hapus baris, "Kirim ke dapur" di toast bill tersimpan |
 | `flowD.cjs` | retail di HP 375: Simpan bill, toast tanpa kata dapur, Bayar bill, uang pas |
 | `flowE.cjs` | ubin Catatan pesanan, diskon baris lewat "lainnya" (fitur Discount harus aktif untuk diskon) |
+| `flowF.cjs` | HP 360: toast "Item dihapus / Urungkan" ada di bawah, di atas dock (tidak menutupi kotak cari dan chip kategori); tetap di atas saat sheet pesanan terbuka |
 | `widths.cjs` | 320/375/414/768/1024/1280, terang dan gelap: halaman, keranjang, dialog bayar, daftar bill tanpa overflow horizontal dan tanpa error konsol |
 
 `printer-stub.js` dipasang sebelum skrip halaman: printer palsu yang hanya mencatat perintah (`window.__prints`),

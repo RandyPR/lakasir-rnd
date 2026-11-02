@@ -147,6 +147,33 @@
       const timers = new Map();
       let root = null;
 
+      // Where the toasts sit. On top (the default) they cover the search box and the category chips of a phone, which
+      // is exactly what the cashier is about to tap next. So on a phone they sit at the bottom, just above the order
+      // dock. They stay on top when the order sheet, a dialog or the on-screen keyboard is up: there the bottom is
+      // taken, or hidden behind the keyboard, and the top is free.
+      const place = () => {
+        if (!root || !document.body.contains(root)) return;
+        const sheet = document.getElementById('cashier-order-panel');
+        const vv = w.visualViewport;
+        const phone = !w.matchMedia('(min-width: 768px)').matches;
+        const sheetOpen = Boolean(sheet && sheet.getAttribute('aria-modal') === 'true');
+        const keyboard = Boolean(vv && vv.height < w.innerHeight * 0.75);
+        const low = phone && !sheetOpen && !keyboard && !anyModalOpen();
+
+        if (!low) {
+          root.removeAttribute('data-placement');
+          root.style.top = '';
+          root.style.bottom = '';
+          return;
+        }
+
+        const dock = document.querySelector('[data-testid="cart-dock"]');
+        const dockHeight = dock && dock.getClientRects().length > 0 ? Math.ceil(dock.getBoundingClientRect().height) : 0;
+        root.setAttribute('data-placement', 'bottom');
+        root.style.top = 'auto';
+        root.style.bottom = 'calc(env(safe-area-inset-bottom, 0px) + ' + (dockHeight + 12) + 'px)';
+      };
+
       const host = () => {
         if (root && document.body.contains(root)) return root;
         root = document.createElement('div');
@@ -209,6 +236,10 @@
         }
 
         host().appendChild(el);
+        place();
+        // Livewire morphs the page AFTER it dispatched the event that made this toast: the dock may appear or go away
+        // a moment later (the last line was removed), so look at it again once the morph is done.
+        setTimeout(place, 80);
 
         if (o.duration && o.duration > 0) {
           timers.set(id, setTimeout(() => dismiss(id), o.duration));
