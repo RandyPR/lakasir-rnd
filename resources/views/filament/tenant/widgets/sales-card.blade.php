@@ -9,18 +9,25 @@
         @php
             $arrow = ['up' => '▲', 'down' => '▼', 'flat' => '–'];
             $today = $card['kind'] === 'today';
+            $picker = $picker ?? null;
         @endphp
 
         {{-- Wide: one strip --}}
         <section class="sc-strip {{ $today ? 'sc-strip--today' : '' }} sc-wide">
             <header class="sc-head">
-                <b>{{ $card['title'] }}</b>
+                @if ($picker)
+                    @include('filament.tenant.widgets.sales-card-picker')
+                @else
+                    <b>{{ $card['title'] }}</b>
+                @endif
                 <span class="sc-head-meta">
                     @if ($card['meta'])
                         <span>{{ $card['meta'] }}</span>
                     @endif
-                    @if ($today && $card['date'])
+                    @if ($today && $card['date'] && ! $picker)
                         <span>{{ $card['date'] }}@if ($card['as_of']) · {{ $card['as_of'] }}@endif</span>
+                    @elseif ($picker && $card['as_of'])
+                        <span>{{ $card['as_of'] }}</span>
                     @endif
                     @if ($today && $card['sales'] && $card['discount'] !== null)
                         <span>{{ __('Discount') }} <strong>{{ $card['discount'] }}</strong></span>
@@ -98,9 +105,15 @@
         {{-- Narrow: the roomy phone version --}}
         <section class="sc-phone {{ $today ? 'sc-phone--today' : '' }}">
             <div class="sc-top">
-                <b>{{ $card['title'] }}</b>
+                @if ($picker)
+                    @include('filament.tenant.widgets.sales-card-picker')
+                @else
+                    <b>{{ $card['title'] }}</b>
+                @endif
                 <span>
-                    @if ($today && $card['date'])
+                    @if ($picker)
+                        @if ($card['as_of'])<span class="sc-hide-small">{{ $card['as_of'] }}</span>@endif
+                    @elseif ($today && $card['date'])
                         {{ $card['date'] }}<span class="sc-hide-small">@if ($card['as_of']) · {{ $card['as_of'] }}@endif</span>
                     @elseif ($card['meta'])
                         {{ $card['meta'] }}

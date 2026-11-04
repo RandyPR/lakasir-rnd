@@ -27,6 +27,9 @@ class SellingOverview extends Widget
 
     protected int|string|array $columnSpan = 'full';
 
+    /** The business day the card shows ('Y-m-d'); empty is today. Only the dashboard card has a day picker. */
+    public ?string $day = null;
+
     public static function canView(): bool
     {
         return can('read revenue overview') || can('read sales overview');
@@ -37,7 +40,60 @@ class SellingOverview extends Widget
      */
     protected function getViewData(): array
     {
-        return ['card' => $this->card()];
+        $card = $this->card();
+
+        return ['card' => $card, 'picker' => $card && $this->hasDayPicker() ? $this->picker() : null];
+    }
+
+    protected function hasDayPicker(): bool
+    {
+        return true;
+    }
+
+    public function previousDay(): void
+    {
+        $this->day = Carbon::parse($this->pickedDay(), 'UTC')->subDay()->format('Y-m-d');
+    }
+
+    public function nextDay(): void
+    {
+        $this->day = Carbon::parse($this->pickedDay(), 'UTC')->addDay()->format('Y-m-d');
+    }
+
+    public function today(): void
+    {
+        $this->day = null;
+    }
+
+    /**
+     * The business day asked for: a real date that is not in the future, otherwise today.
+     */
+    protected function pickedDay(): string
+    {
+        $today = BusinessDay::today();
+
+        if (! is_string($this->day) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $this->day)) {
+            return $today;
+        }
+
+        try {
+            $day = Carbon::createFromFormat('!Y-m-d', $this->day, 'UTC');
+        } catch (\Throwable) {
+            return $today;
+        }
+
+        return $day->format('Y-m-d') === $this->day && $this->day < $today ? $this->day : $today;
+    }
+
+    /**
+     * @return array{day: string, max: string, is_today: bool}
+     */
+    protected function picker(): array
+    {
+        $today = BusinessDay::today();
+        $day = $this->pickedDay();
+
+        return ['day' => $day, 'max' => $today, 'is_today' => $day === $today];
     }
 
     /**
@@ -47,13 +103,14 @@ class SellingOverview extends Widget
      */
     protected function scope(): array
     {
-        [$start, $end] = BusinessDay::range();
+        $day = $this->pickedDay();
+        [$start, $end] = BusinessDay::range($day);
 
         return [
             'from' => $start->format('Y-m-d H:i:s'),
             'to' => $end->format('Y-m-d H:i:s'),
             'user_id' => null,
-            'title' => __('Today'),
+            'title' => $day === BusinessDay::today() ? __('Today') : $start->copy()->setTimezone(BusinessDay::timezone())->translatedFormat('l'),
             'date' => $start->copy()->setTimezone(BusinessDay::timezone())->translatedFormat('D, j M Y'),
             'meta' => null,
         ];
