@@ -628,5 +628,9 @@
     "Next day": "Next day",
     "Pick a day": "Pick a day",
     "Back to today": "Back to today",
+    "Busy hours": "Busy hours",
+    "Busiest :from–:to, :share% of sales": "Busiest :from–:to, :share% of sales",
+    "Most profitable products": "Most profitable products",
+    "Margin": "Margin",
     "Follows the date and cashier filters of the table": "Follows the date and cashier filters of the table"
 }
