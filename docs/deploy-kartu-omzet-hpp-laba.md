@@ -10,6 +10,10 @@ Tidak ada migrasi, tidak ada izin baru, dan tidak ada langkah server. Kode ikut 
 - **Peringatan modal 0.** Bila ada produk terjual tanpa harga modal pada rentang kartu, tampil satu baris peringatan (hanya untuk yang punya izin `read revenue overview`).
 - **Riwayat Penjualan:** kartu mengikuti filter tanggal dan kasir di tabel (tanpa filter = hari ini) dan disembunyikan di tab Sampah.
 
+## Follow-up: pemilih hari dan tanpa garis oranye
+
+Kartu "Hari ini" di Dasbor punya pemilih hari (◀ ▶, tanggal, "Kembali ke hari ini"). Hari yang dipilih tidak boleh di masa depan dan kembali ke hari ini saat halaman dibuka ulang; grafik dan kartu periode tetap mengikuti toggle Periode. Garis oranye di tepi kartu dihapus. Riwayat Penjualan tidak punya pemilih (filter tanggal tabel yang mengatur kartu). Tidak ada migrasi.
+
 ## Satu definisi "hari ini" untuk semua kartu
 
 Sebelumnya "Laba hari ini" memakai `created_at` dan zona waktu profil, sedangkan "Penjualan hari ini" memakai `date` dan WIB. Sekarang semuanya sama dengan kartu periode: kolom `date`, hari bisnis WIB (`config('pos.business_timezone')`), hanya `is_paid`, penjualan di sampah tidak dihitung. Angka "Laba hari ini" bisa bergeser bila ada transaksi dini hari (tengah malam WIB); jam buka toko (17 sampai 23 WIB) tidak terpengaruh.

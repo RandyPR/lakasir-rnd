@@ -639,5 +639,9 @@
     "average :amount": "rata-rata :amount",
     "Sold without a cost price": "Terjual tanpa harga modal",
     "The profit shown is too high": "Laba yang tampil terlalu besar",
+    "Previous day": "Hari sebelumnya",
+    "Next day": "Hari berikutnya",
+    "Pick a day": "Pilih hari",
+    "Back to today": "Kembali ke hari ini",
     "Follows the date and cashier filters of the table": "Mengikuti filter tanggal dan kasir di tabel"
 }

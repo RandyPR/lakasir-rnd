@@ -34,6 +34,7 @@ if (! function_exists('langKeysSources')) {
             'app/Filament/Tenant/Resources/SellingResource/Widgets/SellingListOverview.php',
             'app/Filament/Tenant/Widgets/SalesPeriodOverview.php',
             'resources/views/filament/tenant/widgets/sales-card.blade.php',
+            'resources/views/filament/tenant/widgets/sales-card-picker.blade.php',
             'app/Support/SalesPeriod.php',
             'app/Filament/Tenant/Resources/SellingResource.php',
             'app/Filament/Tenant/Resources/SellingResource/SellingTrashActions.php',

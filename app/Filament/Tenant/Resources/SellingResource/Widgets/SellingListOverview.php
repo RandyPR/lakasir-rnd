@@ -22,6 +22,11 @@ class SellingListOverview extends SellingOverview
         return ListSellings::class;
     }
 
+    protected function hasDayPicker(): bool
+    {
+        return false;
+    }
+
     protected function card(): ?array
     {
         return $this->activeTab === 'trash' ? null : parent::card();

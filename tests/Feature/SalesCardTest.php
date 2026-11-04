@@ -407,3 +407,55 @@ test('one date alone is no filter, for the rows and for the card', function () {
     $page->assertCanSeeTableRecords([$old]);
     expect(cardOf(Livewire::test(SellingListOverview::class, ['tableFilters' => $page->instance()->tableFilters]))['title'])->toBe('Today');
 });
+
+test('the dashboard card can show another day, never a future one, and the sales list card has no picker', function () {
+    cardSale('2026-10-25 01:00:00');                                  // today, Sun 25 Oct
+    cardSale('2026-10-24 05:00:00', ['total_price' => 80000]);        // Sat 24 Oct
+    cardSale('2026-10-23 05:00:00', ['total_price' => 20000]);        // Fri 23 Oct
+
+    $widget = Livewire::test(SellingOverview::class)
+        ->assertSee('Today')
+        ->assertDontSee('Back to today');
+    expect(cardOf($widget)['transactions'])->toBe('1');
+
+    $widget->call('previousDay')->assertSee('Back to today');
+    $card = cardOf($widget);
+    expect($widget->get('day'))->toBe('2026-10-24')
+        ->and($card['title'])->toBe('Saturday')
+        ->and($card['date'])->toBe('Sat, 24 Oct 2026')
+        ->and($card['omzet'])->toContain('80,000')
+        ->and($card['as_of'])->toBeNull()
+        ->and($card['vs'])->toBe('compared to the day before')
+        ->and($card['omzet_delta'])->toBe(['dir' => 'up', 'text' => '300%']);
+
+    $widget->call('previousDay');
+    expect(cardOf($widget)['omzet'])->toContain('20,000');
+
+    $widget->call('nextDay')->call('nextDay');
+    expect($widget->get('day'))->toBe('2026-10-25')
+        ->and(cardOf($widget)['title'])->toBe('Today');
+
+    $widget->call('nextDay');                                         // tomorrow: not allowed
+    expect(cardOf($widget)['title'])->toBe('Today');
+
+    $widget->set('day', '2026-10-24')->call('today');
+    expect($widget->get('day'))->toBeNull();
+
+    foreach (['2026-13-45', 'yesterday', '2026-10-30', '', '2026-10-2'] as $bad) {
+        expect(cardOf(Livewire::test(SellingOverview::class, ['day' => $bad]))['title'])->toBe('Today');
+    }
+
+    Livewire::test(SellingListOverview::class)->assertDontSee('Pick a day');
+    Livewire::test(SellingOverview::class)->assertSee('Pick a day');
+});
+
+test('a day in the past is cut at WIB midnight and has no "as of" time', function () {
+    cardSale('2026-10-23 16:59:00');   // 23:59 WIB on the 23rd
+    cardSale('2026-10-23 17:00:00');   // 00:00 WIB on the 24th
+    cardSale('2026-10-24 16:59:59');   // 23:59:59 WIB on the 24th
+    cardSale('2026-10-24 17:00:00');   // the 25th
+
+    $card = cardOf(Livewire::test(SellingOverview::class, ['day' => '2026-10-24']));
+
+    expect($card['transactions'])->toBe('2');
+});

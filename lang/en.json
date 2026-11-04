@@ -624,5 +624,9 @@
     "average :amount": "average :amount",
     "Sold without a cost price": "Sold without a cost price",
     "The profit shown is too high": "The profit shown is too high",
+    "Previous day": "Previous day",
+    "Next day": "Next day",
+    "Pick a day": "Pick a day",
+    "Back to today": "Back to today",
     "Follows the date and cashier filters of the table": "Follows the date and cashier filters of the table"
 }
