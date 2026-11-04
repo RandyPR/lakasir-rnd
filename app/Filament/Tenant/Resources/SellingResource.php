@@ -88,6 +88,14 @@ class SellingResource extends Resource
                     ->translateLabel()
                     ->sortable()
                     ->money(Setting::get('currency', 'IDR')),
+                TextColumn::make('profit')
+                    ->label(__('Profit'))
+                    ->state(fn (Selling $record): float => (float) $record->grand_total_price - (float) $record->total_cost)
+                    ->money(Setting::get('currency', 'IDR'))
+                    ->color(fn (float $state): ?string => $state < 0 ? 'danger' : null)
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query
+                        ->orderByRaw('(total_price - tax_price - total_discount_per_item - discount_price - COALESCE(total_cost, 0)) '.($direction === 'asc' ? 'asc' : 'desc')))
+                    ->visible(fn (): bool => can('read revenue overview')),
                 TextColumn::make('total_price')
                     ->translateLabel()
                     ->sortable()

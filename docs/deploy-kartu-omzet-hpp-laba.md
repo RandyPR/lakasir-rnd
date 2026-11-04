@@ -14,6 +14,15 @@ Tidak ada migrasi, tidak ada izin baru, dan tidak ada langkah server. Kode ikut 
 
 Kartu "Hari ini" di Dasbor punya pemilih hari (◀ ▶, tanggal, "Kembali ke hari ini"). Hari yang dipilih tidak boleh di masa depan dan kembali ke hari ini saat halaman dibuka ulang; grafik dan kartu periode tetap mengikuti toggle Periode. Garis oranye di tepi kartu dihapus. Riwayat Penjualan tidak punya pemilih (filter tanggal tabel yang mengatur kartu). Tidak ada migrasi.
 
+## Follow-up: jam ramai, laba per produk, laba per transaksi
+
+Tanpa migrasi, tanpa izin baru, tanpa build frontend.
+
+- **Dasbor, "Jam ramai"** (izin `read sales overview` atau `read revenue overview`): jumlah penjualan per jam WIB pada periode yang dipilih, jam terramai dinamai di bawah judul. Jam ditampilkan di sekitar penjualan saja (minimal 8 jam).
+- **Dasbor, "Produk paling menguntungkan"** (izin `read revenue overview`): 5 produk dengan laba terbesar pada periode. Laba per produk = harga baris − diskon baris − modal baris; diskon dan pajak seluruh transaksi tidak dibagi ke baris. Margin di bawah 20% bertanda kuning, nol atau minus bertanda merah.
+- **Riwayat Penjualan, kolom "Laba"** (izin `read revenue overview`): omzet transaksi (setelah pajak dan diskon) − modal transaksi, bisa diurutkan dan bisa disembunyikan lewat tombol kolom.
+- Belum dikerjakan: laba bersih dengan biaya tetap (butuh tabel baru).
+
 ## Satu definisi "hari ini" untuk semua kartu
 
 Sebelumnya "Laba hari ini" memakai `created_at` dan zona waktu profil, sedangkan "Penjualan hari ini" memakai `date` dan WIB. Sekarang semuanya sama dengan kartu periode: kolom `date`, hari bisnis WIB (`config('pos.business_timezone')`), hanya `is_paid`, penjualan di sampah tidak dihitung. Angka "Laba hari ini" bisa bergeser bila ada transaksi dini hari (tengah malam WIB); jam buka toko (17 sampai 23 WIB) tidak terpengaruh.

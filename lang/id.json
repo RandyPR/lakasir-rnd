@@ -643,5 +643,9 @@
     "Next day": "Hari berikutnya",
     "Pick a day": "Pilih hari",
     "Back to today": "Kembali ke hari ini",
+    "Busy hours": "Jam ramai",
+    "Busiest :from–:to, :share% of sales": "Paling ramai :from–:to, :share% dari penjualan",
+    "Most profitable products": "Produk paling menguntungkan",
+    "Margin": "Margin",
     "Follows the date and cashier filters of the table": "Mengikuti filter tanggal dan kasir di tabel"
 }
