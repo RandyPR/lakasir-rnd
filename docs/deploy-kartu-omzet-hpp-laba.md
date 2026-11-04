@@ -21,6 +21,8 @@ Tanpa migrasi, tanpa izin baru, tanpa build frontend.
 - **Dasbor, "Jam ramai"** (izin `read sales overview` atau `read revenue overview`): jumlah penjualan per jam WIB pada periode yang dipilih, jam terramai dinamai di bawah judul. Jam ditampilkan di sekitar penjualan saja (minimal 8 jam).
 - **Dasbor, "Produk paling menguntungkan"** (izin `read revenue overview`): 5 produk dengan laba terbesar pada periode. Laba per produk = harga baris − diskon baris − modal baris; diskon dan pajak seluruh transaksi tidak dibagi ke baris. Margin di bawah 20% bertanda kuning, nol atau minus bertanda merah.
 - **Riwayat Penjualan, kolom "Laba"** (izin `read revenue overview`): omzet transaksi (setelah pajak dan diskon) − modal transaksi, bisa diurutkan dan bisa disembunyikan lewat tombol kolom.
+- **Dasbor, "Penjualan per jam"** (di bawah kartu Hari ini): batang penjualan per jam untuk hari yang dipilih di pemilih hari kartu (hari ini bila belum memilih). Kartu memberi tahu grafik lewat event Livewire `day-picked`; grafik tidak ikut toggle Periode.
+- **Dasbor, "Jam ramai per hari"**: heatmap hari × jam (bulan × jam untuk Tahunan) pada periode yang dipilih; sel makin gelap makin ramai, angka muncul di layar lebar, di HP hanya warna (sentuh sel untuk melihat jumlahnya).
 - Belum dikerjakan: laba bersih dengan biaya tetap (butuh tabel baru).
 
 ## Satu definisi "hari ini" untuk semua kartu

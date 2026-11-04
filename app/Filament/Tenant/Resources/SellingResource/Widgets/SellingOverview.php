@@ -4,6 +4,7 @@ namespace App\Filament\Tenant\Resources\SellingResource\Widgets;
 
 use App\Filament\Tenant\Widgets\Concerns\BuildsSalesCard;
 use App\Filament\Tenant\Widgets\Concerns\FormatsMoney;
+use App\Filament\Tenant\Widgets\Concerns\PicksBusinessDay;
 use App\Services\Tenants\SalesSummaryService;
 use App\Support\BusinessDay;
 use Filament\Widgets\Widget;
@@ -18,7 +19,7 @@ use Illuminate\Support\Carbon;
  */
 class SellingOverview extends Widget
 {
-    use BuildsSalesCard, FormatsMoney;
+    use BuildsSalesCard, FormatsMoney, PicksBusinessDay;
 
     protected static string $view = 'filament.tenant.widgets.sales-card';
 
@@ -26,9 +27,6 @@ class SellingOverview extends Widget
     protected static bool $isLazy = false;
 
     protected int|string|array $columnSpan = 'full';
-
-    /** The business day the card shows ('Y-m-d'); empty is today. Only the dashboard card has a day picker. */
-    public ?string $day = null;
 
     public static function canView(): bool
     {
@@ -53,36 +51,30 @@ class SellingOverview extends Widget
     public function previousDay(): void
     {
         $this->day = Carbon::parse($this->pickedDay(), 'UTC')->subDay()->format('Y-m-d');
+        $this->announceDay();
     }
 
     public function nextDay(): void
     {
         $this->day = Carbon::parse($this->pickedDay(), 'UTC')->addDay()->format('Y-m-d');
+        $this->announceDay();
     }
 
     public function today(): void
     {
         $this->day = null;
+        $this->announceDay();
     }
 
-    /**
-     * The business day asked for: a real date that is not in the future, otherwise today.
-     */
-    protected function pickedDay(): string
+    /** The date field sets $day itself; the chart of that day (DayHours) is told through an event. */
+    public function updatedDay(): void
     {
-        $today = BusinessDay::today();
+        $this->announceDay();
+    }
 
-        if (! is_string($this->day) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $this->day)) {
-            return $today;
-        }
-
-        try {
-            $day = Carbon::createFromFormat('!Y-m-d', $this->day, 'UTC');
-        } catch (\Throwable) {
-            return $today;
-        }
-
-        return $day->format('Y-m-d') === $this->day && $this->day < $today ? $this->day : $today;
+    private function announceDay(): void
+    {
+        $this->dispatch('day-picked', day: $this->pickedDay() === BusinessDay::today() ? null : $this->pickedDay());
     }
 
     /**

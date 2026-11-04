@@ -93,6 +93,25 @@ class SalesTrendService
     }
 
     /**
+     * The days (or months) of the period's current window, oldest first: the key as 'Y-m-d' ('Y-m' for a year) and
+     * the label of the chart axis.
+     *
+     * @return list<array{key: string, label: string}>
+     */
+    public function points(SalesPeriod $period, ?CarbonInterface $now = null): array
+    {
+        $localNow = $this->localNow($now);
+        $points = [];
+
+        for ($offset = -($period->length() - 1); $offset <= 0; $offset++) {
+            $start = $period->pointStart($localNow, $offset);
+            $points[] = ['key' => $start->format($period->isMonthly() ? 'Y-m' : 'Y-m-d'), 'label' => $period->pointLabel($start)];
+        }
+
+        return $points;
+    }
+
+    /**
      * The best selling products of the period (same window as trend(), without the period before it).
      *
      * The id column is the product id, so Filament can key the rows of a table widget on it.
