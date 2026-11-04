@@ -622,5 +622,22 @@
     "Not allowed": "Tidak diizinkan",
     "You are not allowed to do this.": "Anda tidak diizinkan melakukan ini.",
     "Something went wrong": "Terjadi kesalahan",
-    "The server could not finish this. Try again.": "Server tidak dapat menyelesaikan ini. Coba lagi."
+    "The server could not finish this. Try again.": "Server tidak dapat menyelesaikan ini. Coba lagi.",
+    "Today": "Hari ini",
+    "compared to the same time yesterday": "dibanding jam yang sama kemarin",
+    "compared to the day before": "dibanding hari sebelumnya",
+    "compared to the :days days before": "dibanding :days hari sebelumnya",
+    "compared to :period": "dibanding :period",
+    "as of :time": "per :time",
+    "after discount": "setelah diskon",
+    "Cost of goods": "HPP",
+    "cost price of goods sold": "modal barang",
+    "of net sales": "dari omzet",
+    "after cost of goods": "setelah HPP",
+    "margin :percent": "margin :percent",
+    "Transactions": "Transaksi",
+    "average :amount": "rata-rata :amount",
+    "Sold without a cost price": "Terjual tanpa harga modal",
+    "The profit shown is too high": "Laba yang tampil terlalu besar",
+    "Follows the date and cashier filters of the table": "Mengikuti filter tanggal dan kasir di tabel"
 }

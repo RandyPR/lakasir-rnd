@@ -140,20 +140,26 @@ test('the chart is for people who may read the revenue overview, and counts only
     expect($data['datasets'][0]['counts'])->toBeNull();
 });
 
-test('the totals compare the period with the one before it', function () {
+test('the period card compares net sales, cost of goods and profit with the period before', function () {
     dashboardSale('2026-10-25 01:00:00');
     dashboardSale('2026-10-24 01:00:00');
     dashboardSale('2026-10-17 01:00:00', ['total_price' => 50000, 'total_cost' => 0]);
 
-    $stats = widgetCall(Livewire::test(SalesPeriodOverview::class, ['filters' => ['period' => 'week']]), 'getStats');
-    $byLabel = collect($stats)->keyBy(fn ($stat) => $stat->getLabel());
+    $card = widgetCall(Livewire::test(SalesPeriodOverview::class, ['filters' => ['period' => 'week']]), 'card');
 
-    expect($byLabel->keys()->all())->toBe(['Net sales', 'Profit', 'Sales', 'Average per sale'])
-        ->and($byLabel['Net sales']->getDescription())->toContain('300% increase compared to the 7 days before')
-        ->and($byLabel['Sales']->getDescription())->toContain('100% increase')
-        ->and($byLabel['Sales']->getValue())->toBe('2')
-        ->and($byLabel['Profit']->getDescription())->toContain('60% increase')
-        ->and($byLabel['Average per sale']->getDescription())->toContain('100% increase');
+    expect($card['kind'])->toBe('period')
+        ->and($card['title'])->toBe('Last 7 days')
+        ->and($card['meta'])->toBe('compared to the 7 days before')
+        ->and($card['omzet'])->toContain('200,000')
+        ->and($card['omzet_delta'])->toBe(['dir' => 'up', 'text' => '300%'])
+        ->and($card['hpp'])->toContain('120,000')
+        ->and($card['hpp_share'])->toBe('60%')
+        ->and($card['laba'])->toContain('80,000')
+        ->and($card['laba_delta'])->toBe(['dir' => 'up', 'text' => '60%'])
+        ->and($card['margin'])->toBe('40%')
+        ->and($card['transactions'])->toBe('2')
+        ->and($card['transactions_delta'])->toBe(['dir' => 'up', 'text' => '100%'])
+        ->and($card['average'])->toContain('100,000');
 });
 
 test('the number of sales is written the way the shop language writes numbers', function () {
@@ -167,42 +173,54 @@ test('the number of sales is written the way the shop language writes numbers', 
     Selling::insert($rows);
 
     app()->setLocale('id');
-    $stats = widgetCall(Livewire::test(SalesPeriodOverview::class, ['filters' => ['period' => 'week']]), 'getStats');
-    $sales = collect($stats)->first(fn ($stat) => $stat->getLabel() === 'Penjualan');
+    $card = widgetCall(Livewire::test(SalesPeriodOverview::class, ['filters' => ['period' => 'week']]), 'card');
 
-    expect($sales->getValue())->toBe('1.200');
+    expect($card['transactions'])->toBe('1.200');
 });
 
-test('a period with sales after an empty one says so instead of showing a percentage', function () {
+test('a period with sales after an empty one shows no percentage', function () {
     dashboardSale('2026-10-25 01:00:00');
 
-    $stats = widgetCall(Livewire::test(SalesPeriodOverview::class, ['filters' => ['period' => 'week']]), 'getStats');
+    $card = widgetCall(Livewire::test(SalesPeriodOverview::class, ['filters' => ['period' => 'week']]), 'card');
 
-    expect($stats[0]->getDescription())->toBe('No sales in the 7 days before');
+    expect($card['omzet_delta']['dir'])->toBe('none')
+        ->and($card['laba_delta']['dir'])->toBe('none');
 });
 
-test('without any sale the cards are neutral and the page still renders', function () {
+test('without any sale the card shows zeros and the page still renders', function () {
     $component = Livewire::test(SalesPeriodOverview::class, ['filters' => ['period' => 'month']])
         ->assertSee('Last 30 days')
-        ->assertSee('No sales in the 30 days before');
+        ->assertSee('compared to the 30 days before');
 
-    $stats = widgetCall($component, 'getStats');
+    $card = widgetCall($component, 'card');
 
-    expect($stats[0]->getColor())->toBe('gray');
+    expect($card['margin'])->toBeNull()
+        ->and($card['hpp_share'])->toBeNull()
+        ->and($card['omzet_delta']['dir'])->toBe('none');
 });
 
-test('the cards follow the permissions: money needs the revenue overview, the count the sales overview', function () {
+test('the card follows the permissions: money needs the revenue overview, the count the sales overview', function () {
     dashboardSale('2026-10-25 01:00:00');
-    $labels = fn () => collect(widgetCall(
+    $flags = fn () => collect(widgetCall(
         Livewire::test(SalesPeriodOverview::class, ['filters' => ['period' => 'week']]),
-        'getStats'
-    ))->map(fn ($stat) => $stat->getLabel())->all();
+        'card'
+    ))->only(['revenue', 'sales'])->all();
 
     actingAs(dashboardUserCan('read sales overview'));
-    expect($labels())->toBe(['Sales']);
+    expect($flags())->toBe(['revenue' => false, 'sales' => true]);
+    Livewire::test(SalesPeriodOverview::class, ['filters' => ['period' => 'week']])
+        ->assertDontSee('Net sales')
+        ->assertDontSee('Cost of goods')
+        ->assertSee('Transactions');
 
     actingAs(dashboardUserCan('read revenue overview'));
-    expect($labels())->toBe(['Net sales', 'Profit', 'Average per sale']);
+    expect($flags())->toBe(['revenue' => true, 'sales' => false]);
+    Livewire::test(SalesPeriodOverview::class, ['filters' => ['period' => 'week']])
+        ->assertSee('Cost of goods')
+        ->assertDontSee('Transactions');
+
+    actingAs(dashboardUserCan());
+    expect(SalesPeriodOverview::canView())->toBeFalse();
 });
 
 test('the best sellers follow the period', function () {

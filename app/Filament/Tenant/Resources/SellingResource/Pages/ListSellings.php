@@ -6,6 +6,7 @@ use App\Filament\Tenant\Resources\SellingResource;
 use App\Filament\Tenant\Resources\SellingResource\SellingTrashActions;
 use App\Models\Tenants\Selling;
 use Filament\Forms\Form;
+use Filament\Pages\Concerns\ExposesTableToWidgets;
 use Filament\Resources\Components\Tab;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Tables;
@@ -14,12 +15,15 @@ use Illuminate\Database\Eloquent\Model;
 
 class ListSellings extends ListRecords
 {
+    // The card on top follows the table: it needs the active tab and the filters of the table.
+    use ExposesTableToWidgets;
+
     protected static string $resource = SellingResource::class;
 
     protected function getHeaderWidgets(): array
     {
         return [
-            SellingResource\Widgets\SellingOverview::class,
+            SellingResource\Widgets\SellingListOverview::class,
         ];
     }
 

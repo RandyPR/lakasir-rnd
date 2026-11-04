@@ -55,8 +55,8 @@ test('every period has one zero point per day or month even without any sale', f
         ->and($trend['revenue'])->toBe(array_fill(0, $points, 0.0))
         ->and($trend['profit'])->toBe(array_fill(0, $points, 0.0))
         ->and($trend['transactions'])->toBe(array_fill(0, $points, 0))
-        ->and($trend['totals'])->toBe(['revenue' => 0.0, 'profit' => 0.0, 'transactions' => 0, 'average' => 0.0])
-        ->and($trend['previous'])->toBe(['revenue' => 0.0, 'profit' => 0.0, 'transactions' => 0, 'average' => 0.0]);
+        ->and($trend['totals'])->toBe(['revenue' => 0.0, 'cost' => 0.0, 'profit' => 0.0, 'transactions' => 0, 'average' => 0.0])
+        ->and($trend['previous'])->toBe(['revenue' => 0.0, 'cost' => 0.0, 'profit' => 0.0, 'transactions' => 0, 'average' => 0.0]);
 })->with([
     'week' => [SalesPeriod::Week, 7],
     'two weeks' => [SalesPeriod::TwoWeeks, 14],
@@ -114,7 +114,7 @@ test('revenue is the price without tax and discounts, profit is revenue minus co
 
     expect($trend['revenue'][6])->toBe(90000.0)
         ->and($trend['profit'][6])->toBe(30000.0)
-        ->and($trend['totals'])->toBe(['revenue' => 90000.0, 'profit' => 30000.0, 'transactions' => 1, 'average' => 90000.0]);
+        ->and($trend['totals'])->toBe(['revenue' => 90000.0, 'cost' => 60000.0, 'profit' => 30000.0, 'transactions' => 1, 'average' => 90000.0]);
 });
 
 test('a sale made at a loss gives a negative profit', function () {

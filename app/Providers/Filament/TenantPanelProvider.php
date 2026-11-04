@@ -16,6 +16,7 @@ use App\Features\Voucher;
 use App\Filament\Tenant\Pages\CartItem;
 use App\Filament\Tenant\Pages\Cashier;
 use App\Filament\Tenant\Pages\CashierReport;
+use App\Filament\Tenant\Pages\Dashboard;
 use App\Filament\Tenant\Pages\GeneralSetting;
 use App\Filament\Tenant\Pages\POS;
 use App\Filament\Tenant\Pages\Printer;
@@ -33,6 +34,7 @@ use App\Filament\Tenant\Resources\PurchasingResource;
 use App\Filament\Tenant\Resources\ReceivableResource;
 use App\Filament\Tenant\Resources\RoleResource;
 use App\Filament\Tenant\Resources\SellingResource;
+use App\Filament\Tenant\Resources\SellingResource\Pages\ListSellings;
 use App\Filament\Tenant\Resources\StockOpnameResource;
 use App\Filament\Tenant\Resources\SupplierResource;
 use App\Filament\Tenant\Resources\TableResource;
@@ -95,6 +97,13 @@ class TenantPanelProvider extends PanelProvider
         FilamentView::registerRenderHook(
             PanelsRenderHook::GLOBAL_SEARCH_AFTER,
             fn () => view('version-indicator')
+        );
+
+        // Styles of the compact sales card, only where the card is.
+        FilamentView::registerRenderHook(
+            PanelsRenderHook::HEAD_END,
+            fn () => view('sales-card-styles'),
+            scopes: [Dashboard::class, ListSellings::class],
         );
 
         // A Livewire request that fails (session ended, connection dropped) gets a toast, not a blank overlay.

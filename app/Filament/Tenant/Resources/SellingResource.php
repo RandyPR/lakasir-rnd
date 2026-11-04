@@ -9,6 +9,7 @@ use App\Models\Tenants\Profile;
 use App\Models\Tenants\Selling;
 use App\Models\Tenants\Setting;
 use App\Models\Tenants\User;
+use App\Support\BusinessDay;
 use App\Traits\HasTranslatableResource;
 use Filament\Forms\Components\DatePicker;
 use Filament\Resources\Resource;
@@ -21,6 +22,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Carbon;
+use Throwable;
 
 class SellingResource extends Resource
 {
@@ -146,18 +148,11 @@ class SellingResource extends Resource
                         return Carbon::parse($data['start_date'])->toFormattedDateString().' s/d '.Carbon::parse($data['end_date'])->toFormattedDateString();
                     })
                     ->query(function (Builder $query, array $data): Builder {
-                        $startDate = $data['start_date'];
-                        $endDate = $data['end_date'];
-                        if ($timezone = Profile::get()->timezone) {
-                            if (! $startDate && ! $endDate) {
-                                return $query;
-                            }
-                            $startDate = Carbon::parse($startDate, $timezone)->setTimezone('UTC');
-                            $endDate = Carbon::parse($endDate, $timezone)->addDay()->setTimezone('UTC');
-                        }
+                        $range = static::dateFilterRange($data['start_date'] ?? null, $data['end_date'] ?? null);
 
-                        return $query
-                            ->when($startDate && $endDate, fn (Builder $builder) => $builder->whereBetween('date', [$startDate, $endDate]));
+                        return $query->when($range, fn (Builder $builder) => $builder
+                            ->where('date', '>=', $range[0]->format('Y-m-d H:i:s'))
+                            ->where('date', '<', $range[1]->format('Y-m-d H:i:s')));
                     }),
             ])
             ->deferFilters()
@@ -188,6 +183,34 @@ class SellingResource extends Resource
     /**
      * Whether the list is on its Trash tab (only people who may restore see that tab).
      */
+    /**
+     * The days of the date filter as [from, to) in UTC: whole days in the shop timezone, from the start of the first
+     * day to the end of the last one. The card on top of the list (SellingListOverview) uses the same range, so the
+     * card and the rows add up. Only a complete range counts; one date alone is no filter.
+     *
+     * A date picker that is filled from the address (a reload, a shared link) hands over the date with the current
+     * time of day, so the time is cut off here.
+     *
+     * @return array{0: Carbon, 1: Carbon}|null
+     */
+    public static function dateFilterRange(mixed $startDate, mixed $endDate): ?array
+    {
+        if (! is_string($startDate) || ! is_string($endDate) || $startDate === '' || $endDate === '') {
+            return null;
+        }
+
+        $timezone = Profile::get()->timezone ?: BusinessDay::timezone();
+
+        try {
+            $from = Carbon::parse($startDate, $timezone)->startOfDay();
+            $to = Carbon::parse($endDate, $timezone)->startOfDay()->addDay();
+        } catch (Throwable) {
+            return null;
+        }
+
+        return $to > $from ? [$from->utc(), $to->utc()] : null;
+    }
+
     public static function showsTrash(mixed $livewire): bool
     {
         return ($livewire->activeTab ?? null) === 'trash' && SellingTrashActions::allowed();

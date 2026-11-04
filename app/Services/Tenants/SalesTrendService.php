@@ -32,8 +32,8 @@ class SalesTrendService
      *     revenue: list<float>,
      *     profit: list<float>,
      *     transactions: list<int>,
-     *     totals: array{revenue: float, profit: float, transactions: int, average: float},
-     *     previous: array{revenue: float, profit: float, transactions: int, average: float},
+     *     totals: array{revenue: float, cost: float, profit: float, transactions: int, average: float},
+     *     previous: array{revenue: float, cost: float, profit: float, transactions: int, average: float},
      * }
      */
     public function trend(SalesPeriod $period, ?CarbonInterface $now = null): array
@@ -48,7 +48,7 @@ class SalesTrendService
         }
         $boundaries = array_map(fn (Carbon $start): string => $start->copy()->utc()->format('Y-m-d H:i:s'), $starts);
 
-        $buckets = array_fill(0, 2 * $length, ['revenue' => 0.0, 'profit' => 0.0, 'transactions' => 0]);
+        $buckets = array_fill(0, 2 * $length, ['revenue' => 0.0, 'cost' => 0.0, 'profit' => 0.0, 'transactions' => 0]);
 
         $rows = Selling::query()
             ->isPaid()
@@ -70,6 +70,7 @@ class SalesTrendService
                 - (float) $row->discount_price;
 
             $buckets[$index]['revenue'] += $revenue;
+            $buckets[$index]['cost'] += (float) $row->total_cost;
             $buckets[$index]['profit'] += $revenue - (float) $row->total_cost;
             $buckets[$index]['transactions']++;
         }
@@ -166,8 +167,8 @@ class SalesTrendService
     }
 
     /**
-     * @param  list<array{revenue: float, profit: float, transactions: int}>  $buckets
-     * @return array{revenue: float, profit: float, transactions: int, average: float}
+     * @param  list<array{revenue: float, cost: float, profit: float, transactions: int}>  $buckets
+     * @return array{revenue: float, cost: float, profit: float, transactions: int, average: float}
      */
     private function totals(array $buckets): array
     {
@@ -176,6 +177,7 @@ class SalesTrendService
 
         return [
             'revenue' => $revenue,
+            'cost' => round(array_sum(array_column($buckets, 'cost')), 2),
             'profit' => round(array_sum(array_column($buckets, 'profit')), 2),
             'transactions' => $transactions,
             'average' => $transactions > 0 ? round($revenue / $transactions, 2) : 0.0,

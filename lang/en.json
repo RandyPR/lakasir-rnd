@@ -607,5 +607,22 @@
     "Not allowed": "Not allowed",
     "You are not allowed to do this.": "You are not allowed to do this.",
     "Something went wrong": "Something went wrong",
-    "The server could not finish this. Try again.": "The server could not finish this. Try again."
+    "The server could not finish this. Try again.": "The server could not finish this. Try again.",
+    "Today": "Today",
+    "compared to the same time yesterday": "compared to the same time yesterday",
+    "compared to the day before": "compared to the day before",
+    "compared to the :days days before": "compared to the :days days before",
+    "compared to :period": "compared to :period",
+    "as of :time": "as of :time",
+    "after discount": "after discount",
+    "Cost of goods": "Cost of goods",
+    "cost price of goods sold": "cost price of goods sold",
+    "of net sales": "of net sales",
+    "after cost of goods": "after cost of goods",
+    "margin :percent": "margin :percent",
+    "Transactions": "Transactions",
+    "average :amount": "average :amount",
+    "Sold without a cost price": "Sold without a cost price",
+    "The profit shown is too high": "The profit shown is too high",
+    "Follows the date and cashier filters of the table": "Follows the date and cashier filters of the table"
 }
