@@ -2,23 +2,28 @@
 
 namespace App\Filament\Tenant\Widgets;
 
+use App\Filament\Tenant\Widgets\Concerns\BuildsSalesCard;
 use App\Filament\Tenant\Widgets\Concerns\UsesSalesPeriod;
-use Filament\Widgets\StatsOverviewWidget as BaseWidget;
-use Filament\Widgets\StatsOverviewWidget\Stat;
-use Illuminate\Support\Number;
+use Filament\Widgets\Widget;
 
 /**
- * Totals of the period chosen on the dashboard, each against the period right before it.
- * Revenue, profit and the average sale are money (permission "read revenue overview"); the number of sales
- * follows "read sales overview", the same split as Today total profit / Sales today.
+ * Net sales, cost of goods (HPP) and profit of the period chosen on the dashboard, as one compact card, each
+ * against the period right before it, with the number of sales and the average sale.
+ * Money is "read revenue overview"; the number of sales follows "read sales overview", the same split as the card
+ * of today.
  */
-class SalesPeriodOverview extends BaseWidget
+class SalesPeriodOverview extends Widget
 {
-    use UsesSalesPeriod;
+    use BuildsSalesCard, UsesSalesPeriod;
+
+    protected static string $view = 'filament.tenant.widgets.sales-card';
+
+    // The figures are cheap and sit at the top of the page: no placeholder that jumps when it loads.
+    protected static bool $isLazy = false;
 
     protected static ?int $sort = 5;
 
-    protected static ?string $pollingInterval = null;
+    protected int|string|array $columnSpan = 'full';
 
     public static function canView(): bool
     {
@@ -26,79 +31,41 @@ class SalesPeriodOverview extends BaseWidget
     }
 
     /**
-     * Two cards a row: a full rupiah amount in a card a quarter of the page wide runs out of its card.
+     * @return array<string, mixed>
      */
-    protected function getColumns(): int
+    protected function getViewData(): array
     {
-        return 2;
-    }
-
-    protected function getHeading(): ?string
-    {
-        return $this->period()->description();
-    }
-
-    protected function getStats(): array
-    {
-        $trend = $this->trend();
-        $totals = $trend['totals'];
-        $previous = $trend['previous'];
-        $stats = [];
-
-        if (can('read revenue overview')) {
-            $stats[] = $this->stat(__('Net sales'), $this->money($totals['revenue']), $totals['revenue'], $previous['revenue'], $trend['revenue']);
-            $stats[] = $this->stat(__('Profit'), $this->money($totals['profit']), $totals['profit'], $previous['profit'], $trend['profit']);
-        }
-
-        if (can('read sales overview')) {
-            $stats[] = $this->stat(__('Sales'), Number::format($totals['transactions'], locale: app()->getLocale()), $totals['transactions'], $previous['transactions'], $trend['transactions']);
-        }
-
-        if (can('read revenue overview')) {
-            $stats[] = $this->stat(__('Average per sale'), $this->money($totals['average']), $totals['average'], $previous['average']);
-        }
-
-        return $stats;
+        return ['card' => $this->card()];
     }
 
     /**
-     * @param  list<int|float>|null  $series
+     * @return array<string, mixed>
      */
-    private function stat(string $label, string $value, float|int $current, float|int $previous, ?array $series = null): Stat
+    protected function card(): array
     {
-        $stat = Stat::make($label, $value);
+        $trend = $this->trend();
+        $period = $this->period();
 
-        if ($series !== null) {
-            $stat->chart($series);
-        }
+        return $this->salesCard('period', $this->asSummary($trend['totals']), $this->asSummary($trend['previous']), [
+            'title' => $period->description(),
+            'meta' => __('compared to :period', ['period' => $period->previousDescription()]),
+        ]);
+    }
 
-        if ($previous == 0 && $current == 0) {
-            return $stat->description(__('No sales in :period', ['period' => $this->period()->previousDescription()]))
-                ->color('gray');
-        }
-
-        if ($previous == 0) {
-            // A percentage of nothing says nothing.
-            return $stat->description(__('No sales in :period', ['period' => $this->period()->previousDescription()]))
-                ->descriptionIcon('heroicon-m-arrow-trending-up')
-                ->color('success');
-        }
-
-        $percent = (int) round(abs($current - $previous) / abs($previous) * 100);
-
-        [$trend, $icon, $color] = match (true) {
-            $current > $previous => [__('increase'), 'heroicon-m-arrow-trending-up', 'success'],
-            $current < $previous => [__('decrease'), 'heroicon-m-arrow-trending-down', 'danger'],
-            default => [__('sideway'), 'heroicon-m-minus', 'warning'],
-        };
-
-        return $stat
-            ->description(__(':percent% :trend compared to :period', [
-                'percent' => $percent,
-                'trend' => $trend,
-                'period' => $this->period()->previousDescription(),
-            ]))
-            ->descriptionIcon($icon)
-            ->color($color);
+    /**
+     * @param  array{revenue: float, cost: float, profit: float, transactions: int, average: float}  $totals
+     * @return array{omzet: float, hpp: float, laba: float, margin: ?float, transactions: int, discount: ?float, average: float}
+     */
+    private function asSummary(array $totals): array
+    {
+        return [
+            'omzet' => $totals['revenue'],
+            'hpp' => $totals['cost'],
+            'laba' => $totals['profit'],
+            'margin' => $totals['revenue'] > 0 ? round($totals['profit'] / $totals['revenue'] * 100, 1) : null,
+            'transactions' => $totals['transactions'],
+            'discount' => null,
+            'average' => $totals['average'],
+        ];
     }
 }

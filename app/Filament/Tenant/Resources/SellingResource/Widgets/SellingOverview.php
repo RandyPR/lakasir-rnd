@@ -2,149 +2,89 @@
 
 namespace App\Filament\Tenant\Resources\SellingResource\Widgets;
 
-use App\Models\Tenants\Profile;
-use App\Models\Tenants\Selling;
-use App\Models\Tenants\SellingDetail;
+use App\Filament\Tenant\Widgets\Concerns\BuildsSalesCard;
+use App\Filament\Tenant\Widgets\Concerns\FormatsMoney;
+use App\Services\Tenants\SalesSummaryService;
 use App\Support\BusinessDay;
-use Filament\Widgets\Concerns\InteractsWithPageFilters;
-use Filament\Widgets\StatsOverviewWidget as BaseWidget;
-use Filament\Widgets\StatsOverviewWidget\Stat;
+use Filament\Widgets\Widget;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Number;
 
-class SellingOverview extends BaseWidget
+/**
+ * Today's net sales, cost of goods (HPP) and profit as one compact card, with the number of sales and the discount.
+ *
+ * "Today" is the business day (config pos.business_timezone, see BusinessDay) and the figures come from
+ * SalesSummaryService, the same definitions as the period cards and the chart. SellingListOverview narrows the
+ * card down to the filters of the sales list.
+ */
+class SellingOverview extends Widget
 {
-    use InteractsWithPageFilters;
+    use BuildsSalesCard, FormatsMoney;
 
-    protected static ?string $pollingInterval = null;
+    protected static string $view = 'filament.tenant.widgets.sales-card';
 
-    protected function getStats(): array
+    // The figures are cheap and sit at the top of the page: no placeholder that jumps when it loads.
+    protected static bool $isLazy = false;
+
+    protected int|string|array $columnSpan = 'full';
+
+    public static function canView(): bool
     {
-        $totalRevenue = $this->getTotalRevenue();
-        $todaySales = $this->getSalesToday();
-        $discountToday = $this->getDiscountToday();
-
-        return [
-            can('read revenue overview') ? Stat::make(__('Today total profit'), $totalRevenue['total_revenue'])
-                ->descriptionIcon($totalRevenue['icon'])
-                ->description($totalRevenue['description'])
-                ->chart([$totalRevenue['yesterdayRevenue'], $totalRevenue['todayRevenue']])
-                ->color($totalRevenue['color']) : null,
-            can('read sales overview') ? Stat::make(__('Sales today'), $todaySales) : null,
-            can('read sales overview') ? Stat::make(__('Discount today'), $discountToday) : null,
-        ];
+        return can('read revenue overview') || can('read sales overview');
     }
 
-    private function getDiscountToday()
+    /**
+     * @return array<string, mixed>
+     */
+    protected function getViewData(): array
     {
-        $carbon = now(Profile::get()->timezone);
-        $today = $carbon->startOfDay()->format('Y-m-d H:i:s e');
-        $startDate = Carbon::parse($today)->setTimezone('UTC');
-        $endDate = Carbon::parse($today)->setTimezone('UTC')->addDay();
-        $totalDiscountSellings = Selling::whereBetween('date', [$startDate, $endDate])
-            ->sum('discount_price');
-
-        $totalDiscountSellingDetails = SellingDetail::whereHas('selling', function ($query) use ($startDate, $endDate) {
-            $query->whereBetween('date', [$startDate, $endDate]);
-        })->sum('discount_price');
-
-        $totalDiscount = $totalDiscountSellings + $totalDiscountSellingDetails;
-
-        return Number::abbreviate($totalDiscount);
+        return ['card' => $this->card()];
     }
 
-    private function getSalesToday()
+    /**
+     * What the card adds up: [from, to) in UTC, the cashier, and the texts above the numbers.
+     *
+     * @return array{from: string, to: string, user_id: ?int, title: string, date: string, meta: ?string}
+     */
+    protected function scope(): array
     {
-        // Same business day as the order numbers (config pos.business_timezone), not the user's profile timezone.
         [$start, $end] = BusinessDay::range();
 
-        return Selling::query()
-            ->where('date', '>=', $start->format('Y-m-d H:i:s'))
-            ->where('date', '<', $end->format('Y-m-d H:i:s'))
-            ->count();
-    }
-
-    private function getTotalRevenue()
-    {
-        $carbon = now(Profile::get()->timezone);
-        $startOfDay = $carbon->startOfDay();
-        $startOfYesterday = $startOfDay->copy()->subDay();
-
-        $yesterdayRevenue = $this->calculateRevenue($startOfYesterday, $startOfDay);
-        $todayRevenue = $this->calculateRevenue($startOfDay, $startOfDay->copy()->addDay());
-
-        $totalYesterdayRevenue = $this->calculateTotalRevenue($yesterdayRevenue);
-        $totalTodayRevenue = $this->calculateTotalRevenue($todayRevenue);
-
-        $readable = $this->getReadableSuffix($totalTodayRevenue);
-
-        $trendData = $this->getTrendData($totalYesterdayRevenue, $totalTodayRevenue);
-
-        $percentage = $totalYesterdayRevenue ? (($totalTodayRevenue - $totalYesterdayRevenue) / $totalYesterdayRevenue) * 100 : 0;
-
         return [
-            'total_revenue' => $readable,
-            'description' => round($percentage).'% '.$trendData['trend'],
-            'yesterdayRevenue' => $totalYesterdayRevenue,
-            'todayRevenue' => $totalTodayRevenue,
-            'color' => $trendData['color'],
-            'icon' => $trendData['icon'],
+            'from' => $start->format('Y-m-d H:i:s'),
+            'to' => $end->format('Y-m-d H:i:s'),
+            'user_id' => null,
+            'title' => __('Today'),
+            'date' => $start->copy()->setTimezone(BusinessDay::timezone())->translatedFormat('D, j M Y'),
+            'meta' => null,
         ];
     }
 
-    private function calculateRevenue($start, $end)
+    /**
+     * @return ?array<string, mixed> null hides the card
+     */
+    protected function card(): ?array
     {
-        return Selling::query()
-            ->select(
-                DB::raw('SUM(sellings.discount_price) as discount_price'),
-                DB::raw('SUM(sellings.total_discount_per_item) as total_discount_per_item'),
-                DB::raw('SUM(sellings.tax_price) as tax_price'),
-                DB::raw('SUM(sellings.total_price) as total_price'),
-                DB::raw('SUM(sellings.total_cost) as total_cost'),
-            )
-            ->isPaid()
-            ->whereBetween('sellings.created_at', [
-                $start->setTimezone('UTC'),
-                $end->setTimezone('UTC'),
-            ])
-            ->first();
-    }
+        $scope = $this->scope();
+        $service = app(SalesSummaryService::class);
+        $compare = $service->compare($scope['from'], $scope['to'], null, $scope['user_id']);
 
-    private function calculateTotalRevenue($revenue)
-    {
-        $grossProfit = $revenue->total_price - $revenue->tax_price - $revenue->total_discount_per_item - $revenue->discount_price;
+        $vs = match (true) {
+            $compare['days'] === 1 && $compare['partial'] => __('compared to the same time yesterday'),
+            $compare['days'] === 1 => __('compared to the day before'),
+            default => __('compared to the :days days before', ['days' => $compare['days']]),
+        };
 
-        return $grossProfit - $revenue->total_cost;
-    }
-
-    private function getReadableSuffix($totalRevenue)
-    {
-        return Number::abbreviate($totalRevenue);
-    }
-
-    private function getTrendData($totalYesterdayRevenue, $totalTodayRevenue)
-    {
-        if ($totalYesterdayRevenue > $totalTodayRevenue) {
-            return [
-                'trend' => __('decrease'),
-                'color' => 'danger',
-                'icon' => 'heroicon-m-arrow-trending-down',
-            ];
-        }
-
-        if ($totalYesterdayRevenue < $totalTodayRevenue) {
-            return [
-                'trend' => __('increase'),
-                'color' => 'success',
-                'icon' => 'heroicon-m-arrow-trending-up',
-            ];
-        }
-
-        return [
-            'trend' => __('sideway'),
-            'color' => 'warning',
-            'icon' => 'heroicon-m-minus',
-        ];
+        return $this->salesCard('today', $compare['current'], $compare['previous'], [
+            'title' => $scope['title'],
+            'date' => $scope['date'],
+            'as_of' => $compare['partial'] && $compare['days'] === 1
+                ? __('as of :time', ['time' => Carbon::now(BusinessDay::timezone())->format('H.i')])
+                : null,
+            'vs' => $vs,
+            'meta' => $scope['meta'],
+            'warning' => can('read revenue overview')
+                ? $service->productsWithoutCost($scope['from'], $scope['to'], $scope['user_id'])
+                : null,
+        ]);
     }
 }
