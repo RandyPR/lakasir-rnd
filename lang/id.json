@@ -647,5 +647,10 @@
     "Busiest :from–:to, :share% of sales": "Paling ramai :from–:to, :share% dari penjualan",
     "Most profitable products": "Produk paling menguntungkan",
     "Margin": "Margin",
+    "Sales per hour": "Penjualan per jam",
+    "Busy hours per day": "Jam ramai per hari",
+    "Fewer": "Sedikit",
+    "More": "Banyak",
+    "Sales in the month": "Penjualan dalam sebulan",
     "Follows the date and cashier filters of the table": "Mengikuti filter tanggal dan kasir di tabel"
 }

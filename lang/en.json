@@ -632,5 +632,10 @@
     "Busiest :from–:to, :share% of sales": "Busiest :from–:to, :share% of sales",
     "Most profitable products": "Most profitable products",
     "Margin": "Margin",
+    "Sales per hour": "Sales per hour",
+    "Busy hours per day": "Busy hours per day",
+    "Fewer": "Fewer",
+    "More": "More",
+    "Sales in the month": "Sales in the month",
     "Follows the date and cashier filters of the table": "Follows the date and cashier filters of the table"
 }

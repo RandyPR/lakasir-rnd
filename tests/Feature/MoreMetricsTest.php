@@ -2,7 +2,10 @@
 
 use App\Filament\Tenant\Pages\Dashboard;
 use App\Filament\Tenant\Resources\SellingResource\Pages\ListSellings;
+use App\Filament\Tenant\Resources\SellingResource\Widgets\SellingOverview;
 use App\Filament\Tenant\Widgets\BusyHours;
+use App\Filament\Tenant\Widgets\BusyHoursHeatmap;
+use App\Filament\Tenant\Widgets\DayHours;
 use App\Filament\Tenant\Widgets\ProfitPerProduct;
 use App\Models\Tenants\Category;
 use App\Models\Tenants\PaymentMethod;
@@ -11,6 +14,7 @@ use App\Models\Tenants\Selling;
 use App\Models\Tenants\SellingDetail;
 use App\Models\Tenants\User;
 use App\Services\Tenants\SalesSummaryService;
+use App\Support\HourRange;
 use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
 use Livewire\Features\SupportTesting\Testable;
@@ -176,4 +180,112 @@ test('the sales list has a profit per sale column that can be sorted', function 
         ->assertTableColumnStateSet('profit', -20000.0, $loss)
         ->sortTable('profit', 'desc')
         ->assertCanSeeTableRecords([$big, $small, $loss], inOrder: true);
+});
+
+test('sales are grouped per day and hour, or per month, in shop time', function () {
+    metricSale('2026-10-25 12:30:00');                                    // Sun 25 Oct 19.30 WIB
+    metricSale('2026-10-25 12:40:00');
+    metricSale('2026-10-24 17:10:00');                                    // Sun 25 Oct 00.10 WIB (UTC date is the 24th)
+    metricSale('2026-10-24 12:00:00');                                    // Sat 24 Oct 19.00
+    metricSale('2026-09-30 17:30:00');                                    // 1 Oct 00.30 WIB
+    metricSale('2026-10-25 12:30:00', ['is_paid' => false]);
+
+    $service = app(SalesSummaryService::class);
+    $days = $service->salesByDayAndHour('2026-09-01 00:00:00', '2026-11-01 00:00:00');
+
+    expect($days['2026-10-25'][19])->toBe(2)
+        ->and($days['2026-10-25'][0])->toBe(1)
+        ->and($days['2026-10-24'][19])->toBe(1)
+        ->and($days['2026-10-01'][0])->toBe(1)
+        ->and(array_sum($days['2026-10-25']))->toBe(3);
+
+    $months = $service->salesByDayAndHour('2026-09-01 00:00:00', '2026-11-01 00:00:00', monthly: true);
+    expect(array_keys($months))->toBe(['2026-10'])
+        ->and(array_sum($months['2026-10']))->toBe(5);
+});
+
+test('the heatmap has a row per day of the period, the hours around the sales, and darker cells for busier hours', function () {
+    foreach (range(1, 4) as $i) {
+        metricSale('2026-10-25 12:'.(10 + $i).':00');                     // 4 sales at 19.xx today
+    }
+    metricSale('2026-10-23 12:10:00');                                    // 1 sale at 19.xx on the 23rd
+
+    $widget = Livewire::test(BusyHoursHeatmap::class, ['filters' => ['period' => 'week']]);
+    $data = metricCall($widget, 'getViewData');
+
+    expect($data['rows'])->toHaveCount(7)
+        ->and($data['hours'])->toContain(18, 19, 20)
+        ->and(count($data['hours']))->toBeGreaterThanOrEqual(8)
+        ->and($data['max'])->toBe(4)
+        ->and($data['empty'])->toBeFalse();
+
+    $today = collect($data['rows'])->last();
+    $index = array_search(19, $data['hours'], true);
+    expect($today['total'])->toBe(4)
+        ->and($today['cells'][$index]['count'])->toBe(4)
+        ->and($today['cells'][$index]['level'])->toEqual(1.0)
+        ->and($data['rows'][4]['cells'][$index]['level'])->toEqual(0.25);
+
+    $widget->assertSee('Busy hours per day')->assertSee('Last 7 days');
+
+    $year = metricCall(Livewire::test(BusyHoursHeatmap::class, ['filters' => ['period' => 'year']]), 'getViewData');
+    expect($year['rows'])->toHaveCount(12)
+        ->and(collect($year['rows'])->sum('total'))->toBe(5);
+});
+
+test('the heatmap is empty without sales', function () {
+    $data = metricCall(Livewire::test(BusyHoursHeatmap::class, ['filters' => ['period' => 'week']]), 'getViewData');
+
+    expect($data['empty'])->toBeTrue()->and($data['rows'])->toHaveCount(7);
+    Livewire::test(BusyHoursHeatmap::class, ['filters' => ['period' => 'week']])->assertSee('No sales in this period');
+});
+
+test('the chart of one day follows the day picked on the card, through an event, and never the future', function () {
+    metricSale('2026-10-25 12:30:00');                                    // today 19.30
+    metricSale('2026-10-24 12:00:00');                                    // Sat 24 Oct 19.00
+    metricSale('2026-10-24 12:20:00');
+    metricSale('2026-10-24 15:00:00');                                    // Sat 24 Oct 22.00
+
+    $chart = Livewire::test(DayHours::class);
+    $data = metricCall($chart, 'getData');
+
+    expect((string) metricCall($chart, 'getDescription'))->toBe('Busiest 19.00–20.00, 100% of sales · Today')
+        ->and($data['datasets'][0]['data'][array_search('19', $data['labels'], true)])->toBe(1);
+
+    $chart->dispatch('day-picked', day: '2026-10-24');
+    $data = metricCall($chart, 'getData');
+    expect((string) metricCall($chart, 'getDescription'))->toBe('Busiest 19.00–20.00, 67% of sales · Saturday, 24 Oct 2026')
+        ->and($data['datasets'][0]['data'][array_search('19', $data['labels'], true)])->toBe(2)
+        ->and($data['datasets'][0]['data'][array_search('22', $data['labels'], true)])->toBe(1);
+
+    $chart->dispatch('day-picked', day: '2026-12-31');                    // in the future: today
+    expect((string) metricCall($chart, 'getDescription'))->toContain('Today');
+
+    $chart->dispatch('day-picked', day: null);
+    expect((string) metricCall($chart, 'getDescription'))->toContain('Today');
+});
+
+test('the card tells the day chart which day was picked', function () {
+    Livewire::test(SellingOverview::class)
+        ->call('previousDay')
+        ->assertDispatched('day-picked', day: '2026-10-24')
+        ->call('today')
+        ->assertDispatched('day-picked', day: null);
+});
+
+test('the dashboard puts the day chart under the card and the heatmap among the period widgets', function () {
+    $page = new Dashboard;
+    $header = (fn () => $this->getHeaderWidgets())->call($page);
+
+    expect($header)->toBe([SellingOverview::class, DayHours::class])
+        ->and($page->getWidgets())->toContain(BusyHoursHeatmap::class);
+});
+
+test('the hours drawn are the sales hours with air around them and at least eight hours', function () {
+    expect(HourRange::around(array_fill(0, 24, 0)))->toBe([])
+        ->and(HourRange::around([19 => 3]))->toHaveCount(8)
+        ->and(HourRange::around([19 => 3]))->toContain(18, 19, 20)
+        ->and(HourRange::around([0 => 1]))->toBe(range(0, 7))
+        ->and(HourRange::around([23 => 1]))->toBe(range(16, 23))
+        ->and(HourRange::around([8 => 1, 21 => 2]))->toBe(range(7, 22));
 });

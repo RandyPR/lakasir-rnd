@@ -5,6 +5,7 @@ namespace App\Filament\Tenant\Widgets;
 use App\Filament\Tenant\Widgets\Concerns\UsesSalesPeriod;
 use App\Services\Tenants\SalesSummaryService;
 use App\Services\Tenants\SalesTrendService;
+use App\Support\HourRange;
 use Filament\Support\RawJs;
 use Filament\Widgets\ChartWidget;
 use Illuminate\Contracts\Support\Htmlable;
@@ -40,11 +41,19 @@ class BusyHours extends ChartWidget
 
     public function getDescription(): string|Htmlable|null
     {
+        return $this->describe($this->period()->description());
+    }
+
+    /**
+     * "Busiest 19.00–20.00, 29% of sales", then what the chart covers.
+     */
+    protected function describe(string $covers): string
+    {
         $hours = $this->hours();
         $total = array_sum(array_column($hours, 'transactions'));
 
         if ($total === 0) {
-            return $this->period()->description();
+            return $covers;
         }
 
         $peak = collect($hours)->sortByDesc('transactions')->keys()->first();
@@ -54,7 +63,7 @@ class BusyHours extends ChartWidget
             'from' => sprintf('%02d.00', $peak),
             'to' => sprintf('%02d.00', ($peak + 1) % 24),
             'share' => $share,
-        ]).' · '.$this->period()->description();
+        ]).' · '.$covers;
     }
 
     protected function getType(): string
@@ -65,24 +74,12 @@ class BusyHours extends ChartWidget
     protected function getData(): array
     {
         $hours = $this->hours();
-        $active = array_keys(array_filter($hours, fn (array $hour): bool => $hour['transactions'] > 0));
+        $range = HourRange::around(array_column($hours, 'transactions'));
 
-        if ($active === []) {
+        if ($range === []) {
             return ['labels' => [], 'datasets' => [['data' => []]]];
         }
 
-        // One hour of air around the sales, at least eight hours wide.
-        $from = max(0, min($active) - 1);
-        $to = min(23, max($active) + 1);
-        while ($to - $from < 7) {
-            if ($from > 0) {
-                $from--;
-            }
-            if ($to - $from < 7 && $to < 23) {
-                $to++;
-            }
-        }
-        $range = range($from, $to);
         $showMoney = can('read revenue overview');
         $peak = collect($hours)->sortByDesc('transactions')->keys()->first();
 
@@ -124,7 +121,7 @@ class BusyHours extends ChartWidget
     /**
      * @return array<int, array{transactions: int, omzet: float}>
      */
-    private function hours(): array
+    protected function hours(): array
     {
         [$from, $to] = app(SalesTrendService::class)->currentRange($this->period());
 
@@ -132,5 +129,5 @@ class BusyHours extends ChartWidget
     }
 
     /** @var ?array<int, array{transactions: int, omzet: float}> */
-    private ?array $hoursCache = null;
+    protected ?array $hoursCache = null;
 }

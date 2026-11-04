@@ -5,6 +5,8 @@ namespace App\Filament\Tenant\Pages;
 use App\Filament\Tenant\Resources\SellingResource\Widgets\SellingOverview;
 use App\Filament\Tenant\Widgets\BestSellingProduct;
 use App\Filament\Tenant\Widgets\BusyHours;
+use App\Filament\Tenant\Widgets\BusyHoursHeatmap;
+use App\Filament\Tenant\Widgets\DayHours;
 use App\Filament\Tenant\Widgets\ExpiredProduct;
 use App\Filament\Tenant\Widgets\ProfitPerProduct;
 use App\Filament\Tenant\Widgets\SalesChart;
@@ -35,6 +37,7 @@ class Dashboard extends BaseDashboard
     {
         return [
             SellingOverview::class,
+            DayHours::class,
         ];
     }
 
@@ -47,6 +50,7 @@ class Dashboard extends BaseDashboard
             SalesChart::class,
             BusyHours::class,
             ProfitPerProduct::class,
+            BusyHoursHeatmap::class,
             BestSellingProduct::class,
             ExpiredProduct::class,
         ];

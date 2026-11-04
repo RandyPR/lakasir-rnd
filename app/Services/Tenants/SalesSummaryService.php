@@ -177,4 +177,34 @@ class SalesSummaryService
             ->orderByDesc('profit')
             ->orderBy('products.name');
     }
+
+    /**
+     * Paid sales of the stretch per day (or per month) and per hour, in the shop timezone, for a heatmap.
+     *
+     * @return array<string, array<int, int>> 'Y-m-d' (or 'Y-m' when $monthly) => hour 0 to 23 => number of sales
+     */
+    public function salesByDayAndHour(string $fromUtc, string $toUtc, bool $monthly = false): array
+    {
+        $timezone = new \DateTimeZone(BusinessDay::timezone());
+        $utc = new \DateTimeZone('UTC');
+        $format = $monthly ? 'Y-m' : 'Y-m-d';
+        $grid = [];
+
+        $rows = Selling::query()
+            ->isPaid()
+            ->where('date', '>=', $fromUtc)
+            ->where('date', '<', $toUtc)
+            ->toBase()
+            ->select(['date'])
+            ->cursor();
+
+        foreach ($rows as $row) {
+            $local = (new \DateTimeImmutable((string) $row->date, $utc))->setTimezone($timezone);
+            $key = $local->format($format);
+            $grid[$key] ??= array_fill(0, 24, 0);
+            $grid[$key][(int) $local->format('G')]++;
+        }
+
+        return $grid;
+    }
 }
